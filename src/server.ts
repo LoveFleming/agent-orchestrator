@@ -51,7 +51,7 @@ const _thisDir = _dirname(_fileURLToPath(import.meta.url));
 let providerConfig: any = null;
 try {
   const fs = await import('fs');
-  const configPath = _resolve(_thisDir, '../../tAgent/data/config/providers.json');
+  const configPath = _resolve('/Users/steward/App/tAgent/data/config/providers.json');
   const raw = fs.readFileSync(configPath, 'utf-8');
   providerConfig = JSON.parse(raw);
 } catch {}
@@ -482,21 +482,10 @@ app.get('/health', (_req, res) => {
 });
 
 // ── Serve UI ──
-import { readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const UI_PATH = _resolve(_thisDir, 'public/index.html');
-
+const _publicDir = _resolve(_thisDir, '../public');
+app.use(express.static(_publicDir));
 app.get('/', (_req, res) => {
-  try {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(readFileSync(UI_PATH, 'utf-8'));
-  } catch {
-    res.status(404).send('UI not built. Run: npm run build:ui');
-  }
+  res.sendFile(_resolve(_publicDir, 'index.html'));
 });
 
 // Start
