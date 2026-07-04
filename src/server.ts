@@ -1,11 +1,11 @@
 /**
- * Agent Hub — Agent2Agent Protocol Agent
+ * Agent Orchestrator — Agent2Agent Protocol Client
  *
  * 功能：
- *   1. A2A Server — 暴露 Agent Card + JSON-RPC
- *   2. Agent Loop — 接 LLM API，真的會思考和回答
- *   3. A2A Client — 可以主動呼叫遠端 Agent，建立聊天通道
- *   4. UI — 聊天介面 + 與遠端 Agent 的對話視窗
+ *   1. 客戶端 UI — 使用者輸入請求的入口
+ *   2. A2A Server — 暴露 Agent Card + JSON-RPC
+ *   3. Agent Loop — 接 LLM API，理解需求並調度遠端 Agent
+ *   4. A2A Client — 主動呼叫遠端 Agent，建立聊天通道
  *   5. Webhook — 接收遠端 Agent 的 push notification
  */
 
@@ -87,9 +87,9 @@ function getLLMConfig() {
 // 1. Agent Card
 // ════════════════════════════════════════════════════════
 
-const AGENT_HUB_CARD: AgentCard = {
-  name: 'Agent Hub',
-  description: 'Agent Hub — 獨立思考、回答問題，也可以透過 A2A 協議與遠端 Agent 協作',
+const AGENT_CARD: AgentCard = {
+  name: 'Agent Orchestrator',
+  description: 'Agent Orchestrator — 客戶端請求入口，透過 A2A 協議調度遠端 Agent 協作',
   protocolVersion: '0.3.0',
   version: '1.0.0',
   url: `http://localhost:${PORT}/a2a/jsonrpc`,
@@ -124,7 +124,7 @@ const AGENT_HUB_CARD: AgentCard = {
 // 2. LLM Agent Loop
 // ════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `你是 Agent Hub，一個友善的 AI 助手。
+const SYSTEM_PROMPT = `你是 Agent Orchestrator，一個友善的 AI 助手。你是客戶端的請求入口，負責理解使用者需求並調度遠端 Agent 完成任務。
 
 你的特殊能力：你可以透過 A2A (Agent-to-Agent) 協議與遠端的 Agent 溝通。
 
@@ -144,8 +144,8 @@ async function callLLM(messages: Array<{ role: string; content: string }>): Prom
   const baseURL = config.baseURL.replace(/\/+$/, '');
   const extraHeaders: Record<string, string> = {};
   if (config.providerId === 'openrouter') {
-    extraHeaders['HTTP-Referer'] = 'https://agent-hub.ai';
-    extraHeaders['X-Title'] = 'Agent Hub';
+    extraHeaders['HTTP-Referer'] = 'https://agent-orchestrator.ai';
+    extraHeaders['X-Title'] = 'Agent Orchestrator';
   }
 
   const body = {
@@ -417,7 +417,7 @@ const agentExecutor = new RealAgentExecutor();
 const taskStore = new InMemoryTaskStore();
 
 const requestHandler = new DefaultRequestHandler(
-  AGENT_HUB_CARD,
+  AGENT_CARD,
   taskStore,
   agentExecutor,
   undefined,
@@ -480,8 +480,8 @@ app.get('/health', (_req, res) => {
   const config = getLLMConfig();
   res.json({
     status: 'ok',
-    agent: AGENT_HUB_CARD.name,
-    version: AGENT_HUB_CARD.version,
+    agent: AGENT_CARD.name,
+    version: AGENT_CARD.version,
     llm: config ? `${config.providerId || 'custom'}/${config.model}` : 'NOT CONFIGURED',
     remoteAgent: REMOTE_AGENT_URL,
     channels: chatChannels.size,
@@ -497,7 +497,7 @@ app.get('/', (_req, res) => {
 
 // Start
 app.listen(PORT, () => {
-  console.log(`\n🚀 Agent Hub 已啟動`);
+  console.log(`\n🚀 Agent Orchestrator 已啟動`);
   console.log(`   UI         : http://localhost:${PORT}`);
   console.log(`   Agent Card : http://localhost:${PORT}/${AGENT_CARD_PATH}`);
   console.log(`   JSON-RPC   : http://localhost:${PORT}/a2a/jsonrpc`);

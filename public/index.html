@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent Hub</title>
+<title>Agent Orchestrator</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; }
@@ -59,7 +59,7 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>🔗 Agent Hub</h1>
+  <h1>🔗 Agent Orchestrator</h1>
   <span class="tag">port 4100</span>
   <div class="status">
     <span class="status-dot dot-yellow" id="statusDot"></span>
@@ -230,7 +230,7 @@ async function sendToAgent(text, isDiscuss) {
       if (isDiscuss) {
         addMsg('remote', responseText, '遠端 Agent 回覆');
       } else {
-        addMsg('agent', responseText, 'Agent Hub');
+        addMsg('agent', responseText, 'Agent Orchestrator');
       }
     } else if (data.error) {
       addMsg('system', `❌ ${data.error.message}`);
