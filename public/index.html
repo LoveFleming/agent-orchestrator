@@ -224,8 +224,45 @@ async function sendToAgent(text, isDiscuss) {
     if (data.result) {
       const task = data.result;
       contextId = contextId || task.contextId;
-      const artifact = task.artifacts?.[0];
-      const responseText = artifact?.parts?.[0]?.text || '(no output)';
+
+      // Extract trace and answer from artifacts
+      let responseText = '(no output)';
+      let hdTrace = null;
+
+      if (task.artifacts) {
+        for (const artifact of task.artifacts) {
+          for (const part of (artifact.parts || [])) {
+            if (part.metadata?.role === 'hd-trace') {
+              try { hdTrace = JSON.parse(part.text); } catch {}
+            } else if (part.kind === 'text' && !part.metadata?.role) {
+              responseText = part.text;
+            }
+          }
+        }
+      }
+
+      // If we have a multi-turn trace, show it before the answer
+      if (hdTrace && hdTrace.rounds && hdTrace.rounds.length > 0) {
+        addMsg('system', `📡 HelpDesk 多輪互動 (${hdTrace.rounds.length} 輪)`);
+        for (const r of hdTrace.rounds) {
+          // Question sent to HelpDesk
+          addMsg('remote', r.question.slice(0, 200), `🎯 Round ${r.round} → HelpDesk`);
+
+          if (r.status === 'input-required') {
+            // HelpDesk asked for clarification
+            addMsg('agent', `❓ ${r.response}`, `🎧 HelpDesk Round ${r.round}`);
+            // Auto-generated clarification
+            if (r.clarify) {
+              addMsg('user', r.clarify.slice(0, 200), `🤖 Orchestrator 自動補充`);
+            }
+          } else if (r.status === 'answered') {
+            addMsg('agent', r.response.slice(0, 300), `🎧 HelpDesk Round ${r.round} 回答`);
+          } else {
+            addMsg('agent', r.response.slice(0, 200), `🎧 HelpDesk Round ${r.round} (${r.status})`);
+          }
+        }
+        addMsg('system', '✅ 最終答案');
+      }
 
       if (isDiscuss) {
         addMsg('remote', responseText, '遠端 Agent 回覆');

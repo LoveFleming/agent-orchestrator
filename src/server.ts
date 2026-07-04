@@ -370,13 +370,14 @@ class RealAgentExecutor implements AgentExecutor {
 
       // Check if LLM wants to call remote
       const remoteMatch = llmResponse.match(/\[REMOTE:\s*([\s\S]+?)\]/);
+      const hdTrace: Array<{ round: number; question: string; response: string; status: string; clarify?: string }> = [];
       if (remoteMatch) {
         const remoteQuestion = remoteMatch[1].trim();
         console.log(`[A2A] LLM requests remote: "${remoteQuestion.slice(0, 80)}"`);
 
         // Check if this maps to a specific skill endpoint (e.g. helpdesk)
         const helpdeskSkill = remoteSkills.find(s => s.id === 'paaw-helpdesk' || s.tags.includes('helpdesk'));
-        let remoteResponse: string;
+        let remoteResponse = '';
 
         if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture|bug|skill|workspace|cron|crew|app/i.test(remoteQuestion)) {
           // ── Multi-turn HelpDesk interaction ──
@@ -421,6 +422,8 @@ class RealAgentExecutor implements AgentExecutor {
               hdMessage = clarifyRes.trim();
               console.log(`[A2A] HelpDesk round ${hdRound} auto-clarify: "${hdMessage.slice(0, 80)}"`);
 
+              hdTrace.push({ round: hdRound, question: hdBody.message, response: hdData.question, status: 'input-required', clarify: hdMessage });
+
               // Continue loop — send clarification back to HelpDesk
               continue;
             }
@@ -429,11 +432,13 @@ class RealAgentExecutor implements AgentExecutor {
               // Got final answer — pass through directly
               remoteResponse = hdData.answer;
               console.log(`[A2A] HelpDesk answered (round ${hdRound}, ${hdData.answer.length} chars, ticket: ${hdData.ticketId})`);
+              hdTrace.push({ round: hdRound, question: hdBody.message, response: hdData.answer.slice(0, 200) + '...', status: 'answered' });
               break;
             }
 
             // No answer, no input-required — something went wrong
             remoteResponse = `HelpDesk 已記錄問題（工單 ${hdData.ticketId}），但無法自動回答。${hdData.error || ''}`;
+            hdTrace.push({ round: hdRound, question: hdBody.message, response: remoteResponse, status: 'error' });
             break;
           }
 
@@ -477,6 +482,17 @@ class RealAgentExecutor implements AgentExecutor {
       }
 
       // Artifact
+      const artifactParts: any[] = [{ kind: 'text', text: result }];
+
+      // If multi-turn HelpDesk interaction happened, add trace as metadata part
+      if (hdTrace.length > 0) {
+        artifactParts.push({
+          kind: 'text',
+          text: JSON.stringify({ type: 'hd-trace', ticketId: hdTrace[0] ? (hdTrace as any)._ticketId : null, rounds: hdTrace }),
+          metadata: { role: 'hd-trace' },
+        } as any);
+      }
+
       eventBus.publish({
         kind: 'artifact-update',
         taskId,
@@ -484,7 +500,7 @@ class RealAgentExecutor implements AgentExecutor {
         artifact: {
           artifactId: `${taskId}-result`,
           name: 'response',
-          parts: [{ kind: 'text', text: result }],
+          parts: artifactParts,
         },
       } as TaskArtifactUpdateEvent);
 
