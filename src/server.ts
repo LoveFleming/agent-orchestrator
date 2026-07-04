@@ -12,7 +12,8 @@
 import 'dotenv/config';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { AgentCard, AGENT_CARD_PATH, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from '@a2a-js/sdk';
+import { AgentCard, AGENT_CARD_PATH, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, MessageSendParams } from '@a2a-js/sdk';
+import { ClientFactory } from '@a2a-js/sdk/client';
 import {
   AgentExecutor,
   RequestContext,
@@ -248,6 +249,68 @@ interface ChatChannel {
 // Active chat channels (in-memory)
 const chatChannels = new Map<string, ChatChannel>();
 
+// ── A2A SDK Client (for talking to PAAW via protocol) ──
+let paawClient: Awaited<ReturnType<ClientFactory['createFromUrl']>> | null = null;
+const clientFactory = new ClientFactory();
+
+// Helper for trace formatting
+function hdBody_msg(round: number, msg: string, response: string): string {
+  return `Round ${round}: ${msg.slice(0, 100)}`;
+}
+
+async function getPaawClient() {
+  if (!paawClient) {
+    paawClient = await clientFactory.createFromUrl(REMOTE_AGENT_URL);
+    console.log(`[A2A Client] SDK client connected to ${REMOTE_AGENT_URL}`);
+  }
+  return paawClient;
+}
+
+/**
+ * Send message to PAAW via A2A SDK client.
+ * Returns task object (may be in any state: completed, input-required, etc.)
+ */
+async function sendViaA2ASDK(text: string, contextId?: string): Promise<{ task: any; contextId: string }> {
+  const client = await getPaawClient();
+  const cid = contextId || `ctx-${Date.now()}`;
+
+  const sendParams: MessageSendParams = {
+    message: {
+      kind: 'message',
+      role: 'user',
+      messageId: `msg-${uuidv4()}`,
+      parts: [{ kind: 'text', text }],
+      ...(cid ? { contextId: cid } : {}),
+    },
+  };
+
+  const response = await client.sendMessage(sendParams);
+
+  // SDK returns either a Message or a Task
+  const task = response as any;
+
+  // Update channel history
+  const channel = chatChannels.get(cid) || { contextId: cid, remoteAgentUrl: REMOTE_AGENT_URL, history: [] };
+  channel.history.push({ role: 'user', text, timestamp: new Date().toISOString() });
+
+  // Extract response text
+  let responseText = '';
+  if (task?.artifacts?.[0]?.parts?.[0]?.text) {
+    responseText = task.artifacts[0].parts[0].text;
+  } else if (task?.history) {
+    const lastAgent = [...task.history].reverse().find((m: any) => m.role === 'agent');
+    if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
+  }
+
+  channel.history.push({ role: 'remote', text: responseText, timestamp: new Date().toISOString() });
+  chatChannels.set(cid, channel);
+
+  return { task, contextId: cid };
+}
+
+/**
+ * Legacy: Send message to remote agent (fallback, used for non-SDK paths)
+ */
 async function sendToRemoteAgent(text: string, contextId?: string): Promise<{ response: string; contextId: string }> {
   const remoteEndpoint = `${REMOTE_AGENT_URL}/a2a`;
   const cid = contextId || `ctx-${Date.now()}`;
@@ -379,71 +442,77 @@ class RealAgentExecutor implements AgentExecutor {
         const helpdeskSkill = remoteSkills.find(s => s.id === 'paaw-helpdesk' || s.tags.includes('helpdesk'));
         let remoteResponse = '';
 
-        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture|bug|skill|workspace|cron|crew|app/i.test(remoteQuestion)) {
-          // ── Multi-turn HelpDesk interaction ──
-          // HelpDesk may return "input-required" with a clarifying question.
-          // Orchestrator LLM auto-answers it based on the original user context.
-          // Loop up to MAX_ROUNDS times.
+        if (helpdeskSkill) {
+          // ── Multi-turn A2A via SDK Client ──
+          // Use SDK sendMessage to talk to PAAW's A2A endpoint.
+          // PAAW may return task with status 'input-required'.
+          // Orchestrator LLM auto-answers clarification, loops up to MAX_ROUNDS.
           const MAX_ROUNDS = 3;
-          let hdTicketId: string | null = null;
           let hdMessage = remoteQuestion;
           let hdRound = 0;
+          let a2aContextId = contextId || `hd-ctx-${Date.now()}`;
 
-          console.log(`[A2A] HelpDesk multi-turn start: "${remoteQuestion.slice(0, 60)}"`);
+          console.log(`[A2A] SDK multi-turn start: "${remoteQuestion.slice(0, 60)}" context=${a2aContextId}`);
 
           for (let round = 0; round < MAX_ROUNDS; round++) {
             hdRound++;
-            const hdBody: any = {
-              agentName: 'Agent Orchestrator',
-              agentType: 'a2a',
-              message: hdMessage,
-              subject: remoteQuestion.slice(0, 80),
-            };
-            if (hdTicketId) hdBody.ticketId = hdTicketId;
 
-            const hdRes = await fetch(helpdeskSkill.endpoints.ask, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(hdBody),
-            });
-            const hdData = await hdRes.json() as any;
+            // ── Use SDK Client to send message ──
+            const sdkResult = await sendViaA2ASDK(hdMessage, a2aContextId);
+            const hdTask = sdkResult.task;
+            a2aContextId = sdkResult.contextId;
 
-            if (!hdTicketId) hdTicketId = hdData.ticketId;
+            const taskState = hdTask?.status?.state;
+            console.log(`[A2A] SDK round ${hdRound} state=${taskState}`);
 
-            if (hdData.status === 'input-required' && hdData.question) {
+            // Extract text from task
+            let taskText = '';
+            if (hdTask?.artifacts?.[0]?.parts?.[0]?.text) {
+              taskText = hdTask.artifacts[0].parts[0].text;
+            } else if (hdTask?.history) {
+              const lastAgent = [...hdTask.history].reverse().find((m: any) => m.role === 'agent');
+              if (lastAgent?.parts?.[0]?.text) taskText = lastAgent.parts[0].text;
+            }
+
+            if (taskState === 'input-required' && taskText) {
               // HelpDesk wants clarification — LLM auto-generates answer
-              console.log(`[A2A] HelpDesk round ${hdRound} needs info: "${hdData.question.slice(0, 80)}"`);
+              console.log(`[A2A] SDK round ${hdRound} needs info: "${taskText.slice(0, 80)}"`);
 
               const clarifyRes = await callLLM([
                 { role: 'system', content: '你是 Agent Orchestrator。你正在跟 PAAW HelpDesk 的 AI 互動。' },
-                { role: 'user', content: `原始使用者問題：「${userText}」\n你問了 HelpDesk：「${remoteQuestion}」\nHelpDesk 反問：「${hdData.question}」\n\n請根據使用者的原始問題，直接回答 HelpDesk 的問題。只輸出答案，不要加解釋。如果使用者的問題裡沒有足夠資訊，就回答「沒有特別指定」。` },
+                { role: 'user', content: `原始使用者問題：「${userText}」\n你問了 HelpDesk：「${remoteQuestion}」\nHelpDesk 反問：「${taskText}」\n\n請根據使用者的原始問題，直接回答 HelpDesk 的問題。只輸出答案，不要加解釋。如果使用者的問題裡沒有足夠資訊，就回答「沒有特別指定」。` },
               ]);
 
               hdMessage = clarifyRes.trim();
-              console.log(`[A2A] HelpDesk round ${hdRound} auto-clarify: "${hdMessage.slice(0, 80)}"`);
+              console.log(`[A2A] SDK round ${hdRound} auto-clarify: "${hdMessage.slice(0, 80)}"`);
 
-              hdTrace.push({ round: hdRound, question: hdBody.message, response: hdData.question, status: 'input-required', clarify: hdMessage });
+              hdTrace.push({ round: hdRound, question: hdBody_msg(hdRound, hdMessage, taskText), response: taskText, status: 'input-required', clarify: hdMessage });
 
-              // Continue loop — send clarification back to HelpDesk
               continue;
             }
 
-            if (hdData.answer) {
-              // Got final answer — pass through directly
-              remoteResponse = hdData.answer;
-              console.log(`[A2A] HelpDesk answered (round ${hdRound}, ${hdData.answer.length} chars, ticket: ${hdData.ticketId})`);
-              hdTrace.push({ round: hdRound, question: hdBody.message, response: hdData.answer.slice(0, 200) + '...', status: 'answered' });
+            if (taskState === 'completed' && taskText) {
+              // Got final answer
+              remoteResponse = taskText;
+              console.log(`[A2A] SDK answered (round ${hdRound}, ${taskText.length} chars)`);
+              hdTrace.push({ round: hdRound, question: hdMessage, response: taskText.slice(0, 200) + (taskText.length > 200 ? '...' : ''), status: 'answered' });
               break;
             }
 
-            // No answer, no input-required — something went wrong
-            remoteResponse = `HelpDesk 已記錄問題（工單 ${hdData.ticketId}），但無法自動回答。${hdData.error || ''}`;
-            hdTrace.push({ round: hdRound, question: hdBody.message, response: remoteResponse, status: 'error' });
+            // Unknown state — try to use whatever text we got
+            if (taskText) {
+              remoteResponse = taskText;
+              hdTrace.push({ round: hdRound, question: hdMessage, response: taskText.slice(0, 200), status: taskState || 'unknown' });
+              break;
+            }
+
+            remoteResponse = `HelpDesk 回傳了未預期的狀態: ${taskState}`;
+            hdTrace.push({ round: hdRound, question: hdMessage, response: remoteResponse, status: 'error' });
             break;
           }
 
           if (hdRound >= MAX_ROUNDS && !remoteResponse) {
-            remoteResponse = `HelpDesk 在 ${MAX_ROUNDS} 輪互動後仍無法產出完整答案（工單 ${hdTicketId}）。`;
+            remoteResponse = `HelpDesk 在 ${MAX_ROUNDS} 輪 A2A 互動後仍無法產出完整答案。`;
           }
 
           result = remoteResponse;
