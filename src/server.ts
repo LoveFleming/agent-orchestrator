@@ -254,8 +254,8 @@ let paawClient: Awaited<ReturnType<ClientFactory['createFromUrl']>> | null = nul
 const clientFactory = new ClientFactory();
 
 // Helper for trace formatting
-function hdBody_msg(round: number, msg: string, response: string): string {
-  return `Round ${round}: ${msg.slice(0, 100)}`;
+function truncateMsg(msg: string, max = 500): string {
+  return msg.length > max ? msg.slice(0, max) + '...' : msg;
 }
 
 async function getPaawClient() {
@@ -486,7 +486,7 @@ class RealAgentExecutor implements AgentExecutor {
               hdMessage = clarifyRes.trim();
               console.log(`[A2A] SDK round ${hdRound} auto-clarify: "${hdMessage.slice(0, 80)}"`);
 
-              hdTrace.push({ round: hdRound, question: hdBody_msg(hdRound, hdMessage, taskText), response: taskText, status: 'input-required', clarify: hdMessage });
+              hdTrace.push({ round: hdRound, question: truncateMsg(hdMessage), response: truncateMsg(taskText), status: 'input-required', clarify: truncateMsg(hdMessage) });
 
               continue;
             }
@@ -495,19 +495,19 @@ class RealAgentExecutor implements AgentExecutor {
               // Got final answer
               remoteResponse = taskText;
               console.log(`[A2A] SDK answered (round ${hdRound}, ${taskText.length} chars)`);
-              hdTrace.push({ round: hdRound, question: hdMessage, response: taskText.slice(0, 200) + (taskText.length > 200 ? '...' : ''), status: 'answered' });
+              hdTrace.push({ round: hdRound, question: truncateMsg(hdMessage), response: truncateMsg(taskText), status: 'answered' });
               break;
             }
 
             // Unknown state — try to use whatever text we got
             if (taskText) {
               remoteResponse = taskText;
-              hdTrace.push({ round: hdRound, question: hdMessage, response: taskText.slice(0, 200), status: taskState || 'unknown' });
+              hdTrace.push({ round: hdRound, question: truncateMsg(hdMessage), response: truncateMsg(taskText), status: taskState || 'unknown' });
               break;
             }
 
             remoteResponse = `HelpDesk 回傳了未預期的狀態: ${taskState}`;
-            hdTrace.push({ round: hdRound, question: hdMessage, response: remoteResponse, status: 'error' });
+            hdTrace.push({ round: hdRound, question: truncateMsg(hdMessage), response: truncateMsg(remoteResponse), status: 'error' });
             break;
           }
 

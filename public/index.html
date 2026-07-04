@@ -6,51 +6,88 @@
 <title>Agent Orchestrator</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-  /* Header */
-  .header { padding: 12px 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 12px; background: #010409; }
-  .header h1 { font-size: 16px; font-weight: 600; }
-  .header .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f6feb; color: #fff; }
-  .header .status { margin-left: auto; font-size: 12px; color: #8b949e; display: flex; align-items: center; gap: 6px; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  /* ── Header ── */
+  .header { padding: 8px 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; background: #010409; flex-shrink: 0; }
+  .header h1 { font-size: 14px; font-weight: 600; }
+  .header .tag { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #1f6feb; color: #fff; }
+  .header .status { margin-left: auto; font-size: 11px; color: #8b949e; display: flex; align-items: center; gap: 4px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
   .dot-green { background: #238636; } .dot-yellow { background: #d29922; } .dot-red { background: #da3633; }
 
-  /* Remote Agent Card */
-  .agent-card { padding: 12px 20px; border-bottom: 1px solid #21262d; background: #161b22; display: flex; align-items: center; gap: 16px; }
-  .agent-card .card-left { flex-shrink: 0; }
-  .agent-card .card-avatar { width: 40px; height: 40px; border-radius: 8px; background: #1f6feb; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .agent-card .card-info { flex: 1; }
-  .agent-card .card-name { font-size: 14px; font-weight: 600; }
-  .agent-card .card-desc { font-size: 12px; color: #8b949e; margin-top: 2px; }
-  .agent-card .card-skills { display: flex; gap: 6px; margin-top: 4px; }
-  .agent-card .skill-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #21262d; color: #8b949e; }
-  .agent-card .card-right { flex-shrink: 0; text-align: right; }
-  .agent-card .card-url { font-size: 11px; color: #8b949e; }
-  .agent-card .card-state { font-size: 11px; margin-top: 2px; }
-  .card-state.ok { color: #238636; } .card-state.err { color: #da3633; } .card-state.wait { color: #d29922; }
+  /* ── Remote Agent Bar ── */
+  .agent-bar { padding: 6px 16px; border-bottom: 1px solid #21262d; background: #161b22; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .agent-bar .avatar { width: 28px; height: 28px; border-radius: 6px; background: #1f6feb; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .agent-bar .info { flex: 1; min-width: 0; }
+  .agent-bar .name { font-size: 12px; font-weight: 600; }
+  .agent-bar .desc { font-size: 10px; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-bar .skills { display: flex; gap: 4px; flex-shrink: 0; }
+  .agent-bar .skill-badge { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #21262d; color: #8b949e; }
+  .agent-bar .state { font-size: 10px; flex-shrink: 0; }
+  .state.ok { color: #238636; } .state.err { color: #da3633; } .state.wait { color: #d29922; }
 
-  /* Chat */
-  .chat-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 75%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-  .msg.user { align-self: flex-end; background: #1f6feb; color: #fff; border-bottom-right-radius: 4px; }
-  .msg.agent { align-self: flex-start; background: #161b22; border: 1px solid #30363d; border-bottom-left-radius: 4px; }
-  .msg.remote { align-self: flex-start; background: #0d2818; border: 1px solid #238636; border-bottom-left-radius: 4px; }
-  .msg.system { align-self: center; font-size: 12px; color: #8b949e; background: none; padding: 4px 0; max-width: 100%; }
-  .msg .role { font-size: 11px; font-weight: 600; margin-bottom: 4px; opacity: 0.7; }
+  /* ── Split Panels ── */
+  .split-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .panel { display: flex; flex-direction: column; overflow: hidden; }
+  .panel-top { flex: 0 0 45%; border-bottom: 2px solid #30363d; }
+  .panel-bottom { flex: 1; }
+  .panel-header { padding: 6px 16px; background: #161b22; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .panel-header .icon { font-size: 13px; }
+  .panel-header .title { font-size: 12px; font-weight: 600; color: #c9d1d9; }
+  .panel-header .count { font-size: 10px; color: #8b949e; margin-left: auto; }
+  .panel-header .pulse { width: 8px; height: 8px; border-radius: 50%; background: #d29922; animation: pulse 1.2s infinite; display: none; }
+  .panel-header .pulse.active { display: inline-block; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  /* Input */
-  .input-area { padding: 12px 20px; border-top: 1px solid #21262d; display: flex; gap: 8px; background: #010409; }
-  .input-area textarea { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 10px 14px; color: #e6edf3; font-size: 14px; resize: none; outline: none; font-family: inherit; min-height: 44px; max-height: 120px; }
+  .panel-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+
+  /* ── A2A Trace Items (top panel) ── */
+  .a2a-empty { text-align: center; color: #484f58; font-size: 12px; padding: 30px 20px; }
+  .a2a-thinking { text-align: right; padding: 8px 12px; }
+  .a2a-thinking .dots { display: inline-flex; gap: 3px; align-items: center; }
+  .a2a-thinking .dot { width: 6px; height: 6px; border-radius: 50%; background: #d29922; animation: bounce 1.4s infinite; }
+  .a2a-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+  .a2a-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+  .a2a-thinking .label { font-size: 11px; color: #d29922; margin-left: 6px; vertical-align: middle; }
+
+  .trace-round { margin-bottom: 4px; }
+  .trace-round-header { font-size: 10px; color: #8b949e; margin-bottom: 3px; display: flex; align-items: center; gap: 4px; }
+  .trace-bubble { padding: 6px 10px; border-radius: 10px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-width: 92%; }
+  .trace-bubble.question { background: #1c2435; border: 1px solid #2d4a7a; color: #79c0ff; margin-left: auto; border-bottom-right-radius: 3px; text-align: right; }
+  .trace-bubble.answer { background: #0d2818; border: 1px solid #238636; color: #7ee787; border-bottom-left-radius: 3px; }
+  .trace-bubble.clarify { background: #2a1f0d; border: 1px solid #d29922; color: #e3b341; margin-left: auto; border-bottom-right-radius: 3px; text-align: right; }
+  .trace-bubble.input-req { background: #2a1f0d; border: 1px solid #d29922; color: #e3b341; border-bottom-left-radius: 3px; }
+  .trace-badge { font-size: 9px; padding: 1px 5px; border-radius: 4px; vertical-align: middle; }
+  .badge-q { background: #1f6feb; color: #fff; }
+  .badge-a { background: #238636; color: #fff; }
+  .badge-clarify { background: #d29922; color: #fff; }
+  .badge-input { background: #d29922; color: #fff; }
+
+  /* ── Chat Messages (bottom panel) ── */
+  .chat-empty { text-align: center; color: #484f58; font-size: 12px; padding: 30px 20px; }
+  .chat-msg { display: flex; flex-direction: column; max-width: 80%; }
+  .chat-msg.user { align-self: flex-end; align-items: flex-end; }
+  .chat-msg.agent { align-self: flex-start; align-items: flex-start; }
+  .chat-msg .bubble { padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; text-align: right; }
+  .chat-msg.user .bubble { background: #1f6feb; color: #fff; border-bottom-right-radius: 3px; }
+  .chat-msg.agent .bubble { background: #161b22; border: 1px solid #30363d; border-bottom-left-radius: 3px; }
+  .chat-msg .meta { font-size: 10px; color: #8b949e; margin-top: 2px; padding: 0 4px; }
+  .chat-sys { align-self: center; font-size: 11px; color: #8b949e; padding: 3px 0; }
+
+  /* ── Input ── */
+  .input-area { padding: 8px 12px; border-top: 1px solid #21262d; display: flex; gap: 6px; background: #010409; flex-shrink: 0; }
+  .input-area textarea { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px; color: #e6edf3; font-size: 13px; resize: none; outline: none; font-family: inherit; min-height: 38px; max-height: 100px; text-align: right; }
   .input-area textarea:focus { border-color: #1f6feb; }
-  .input-area button { padding: 8px 20px; border-radius: 10px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .input-area button { padding: 6px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .btn-send { background: #238636; color: #fff; }
   .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-discuss { background: #1f6feb; color: #fff; }
   .btn-discuss:disabled { opacity: 0.4; }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 6px; }
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
 </style>
@@ -60,39 +97,59 @@
 <!-- Header -->
 <div class="header">
   <h1>🔗 Agent Orchestrator</h1>
-  <span class="tag">port 4100</span>
+  <span class="tag">4100</span>
   <div class="status">
     <span class="status-dot dot-yellow" id="statusDot"></span>
-    <span id="statusText">Connecting...</span>
+    <span id="statusText">連線中...</span>
   </div>
 </div>
 
-<!-- Remote Agent Card -->
-<div class="agent-card" id="agentCardSection">
-  <div class="card-left">
-    <div class="card-avatar">🌐</div>
+<!-- Remote Agent Bar -->
+<div class="agent-bar">
+  <div class="avatar">🌐</div>
+  <div class="info">
+    <div class="name" id="cardName">載入中...</div>
+    <div class="desc" id="cardDesc"></div>
   </div>
-  <div class="card-info">
-    <div class="card-name" id="cardName">Loading remote agent...</div>
-    <div class="card-desc" id="cardDesc"></div>
-    <div class="card-skills" id="cardSkills"></div>
-  </div>
-  <div class="card-right">
-    <div class="card-url" id="cardUrl"></div>
-    <div class="card-state wait" id="cardState">等待連線</div>
-  </div>
+  <div class="skills" id="cardSkills"></div>
+  <div class="state wait" id="cardState">等待</div>
 </div>
 
-<!-- Chat -->
-<div class="chat-area" id="chatArea">
-  <div class="msg system">👋 歡迎！直接聊天或按「💬 討論」跟遠端 Agent 對話</div>
+<!-- Split Container -->
+<div class="split-container">
+
+  <!-- ▲ Top: A2A Interaction -->
+  <div class="panel panel-top">
+    <div class="panel-header">
+      <span class="icon">📡</span>
+      <span class="title">A2A 互動過程</span>
+      <span class="pulse" id="a2aPulse"></span>
+      <span class="count" id="a2aCount"></span>
+    </div>
+    <div class="panel-body" id="a2aArea">
+      <div class="a2a-empty">尚無 A2A 互動紀錄</div>
+    </div>
+  </div>
+
+  <!-- ▼ Bottom: Client Chat -->
+  <div class="panel panel-bottom">
+    <div class="panel-header">
+      <span class="icon">💬</span>
+      <span class="title">對話</span>
+      <span class="count" id="chatCount"></span>
+    </div>
+    <div class="panel-body" id="chatArea">
+      <div class="chat-empty">直接聊天或按「💭 討論」跟遠端 Agent 對話</div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Input -->
 <div class="input-area">
-  <textarea id="input" rows="1" placeholder="輸入訊息... (Enter 送出, Shift+Enter 換行)"></textarea>
+  <textarea id="input" rows="1" placeholder="輸入訊息... (Enter 送出)"></textarea>
   <button class="btn-send" id="btnSend" onclick="sendChat()">送出</button>
-  <button class="btn-discuss" id="btnDiscuss" onclick="sendDiscuss()">💬 討論</button>
+  <button class="btn-discuss" id="btnDiscuss" onclick="sendDiscuss()">💭 討論</button>
 </div>
 
 <script>
@@ -100,23 +157,130 @@ const BASE = location.origin;
 const REMOTE = new URLSearchParams(location.search).get('remote') || 'http://localhost:4097';
 let loading = false;
 let contextId = null;
+let chatCount = 0;
+let a2aCount = 0;
+
+// ── DOM refs ──
+const a2aArea = document.getElementById('a2aArea');
+const chatArea = document.getElementById('chatArea');
+const a2aPulse = document.getElementById('a2aPulse');
 
 // ── Helpers ──
-function addMsg(role, text, roleLabel) {
-  const area = document.getElementById('chatArea');
+function addChatMsg(role, text) {
+  // Remove empty placeholder
+  const empty = chatArea.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = `chat-msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = role === 'user' ? '你' : 'Orchestrator';
+  wrap.appendChild(meta);
+
+  chatArea.appendChild(wrap);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  chatCount++;
+  document.getElementById('chatCount').textContent = `${chatCount} 則`;
+}
+
+function addChatSys(text) {
+  const empty = chatArea.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
   const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  if (roleLabel) {
-    const label = document.createElement('div');
-    label.className = 'role';
-    label.textContent = roleLabel;
-    div.appendChild(label);
+  div.className = 'chat-sys';
+  div.textContent = text;
+  chatArea.appendChild(div);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function clearA2A() {
+  a2aArea.innerHTML = '';
+  a2aCount = 0;
+}
+
+function showA2AThinking(label) {
+  a2aPulse.classList.add('active');
+  const empty = a2aArea.querySelector('.a2a-empty');
+  if (empty) empty.remove();
+
+  const div = document.createElement('div');
+  div.className = 'a2a-thinking';
+  div.id = 'a2aThinking';
+  div.innerHTML = `<span class="label">${label}</span><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
+  a2aArea.appendChild(div);
+  a2aArea.scrollTop = a2aArea.scrollHeight;
+}
+
+function hideA2AThinking() {
+  a2aPulse.classList.remove('active');
+  const el = document.getElementById('a2aThinking');
+  if (el) el.remove();
+}
+
+function addA2ARound(round, question, response, status, clarify) {
+  const empty = a2aArea.querySelector('.a2a-empty');
+  if (empty) empty.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'trace-round';
+
+  // Round header
+  const header = document.createElement('div');
+  header.className = 'trace-round-header';
+  header.innerHTML = `<span class="trace-badge badge-q">Q</span> Round ${round}`;
+  wrap.appendChild(header);
+
+  // Question bubble (right-aligned, blue)
+  const qBubble = document.createElement('div');
+  qBubble.className = 'trace-bubble question';
+  qBubble.textContent = question;
+  wrap.appendChild(qBubble);
+
+  // Response bubble
+  if (status === 'input-required') {
+    // Input required (yellow, left)
+    const aBubble = document.createElement('div');
+    aBubble.className = 'trace-bubble input-req';
+    aBubble.innerHTML = `<span class="trace-badge badge-input">❓ 補充</span> `;
+    aBubble.appendChild(document.createTextNode(response));
+    wrap.appendChild(aBubble);
+
+    // Clarify (if any, right-aligned, orange)
+    if (clarify) {
+      const cBubble = document.createElement('div');
+      cBubble.className = 'trace-bubble clarify';
+      cBubble.innerHTML = `<span class="trace-badge badge-clarify">🤖 補充</span> `;
+      cBubble.appendChild(document.createTextNode(clarify));
+      wrap.appendChild(cBubble);
+    }
+  } else if (status === 'answered') {
+    // Answer (green, left)
+    const aBubble = document.createElement('div');
+    aBubble.className = 'trace-bubble answer';
+    aBubble.innerHTML = `<span class="trace-badge badge-a">A</span> `;
+    aBubble.appendChild(document.createTextNode(response));
+    wrap.appendChild(aBubble);
+  } else {
+    // Unknown/error
+    const aBubble = document.createElement('div');
+    aBubble.className = 'trace-bubble';
+    aBubble.style.cssText = 'background:#2d1b1b;border:1px solid #da3633;color:#f85149;';
+    aBubble.textContent = `[${status}] ${response}`;
+    wrap.appendChild(aBubble);
   }
-  const content = document.createElement('div');
-  content.textContent = text;
-  div.appendChild(content);
-  area.appendChild(div);
-  area.scrollTop = area.scrollHeight;
+
+  a2aArea.appendChild(wrap);
+  a2aArea.scrollTop = a2aArea.scrollHeight;
+  a2aCount++;
+  document.getElementById('a2aCount').textContent = `${a2aCount} 輪`;
 }
 
 function setLoading(v) {
@@ -128,13 +292,14 @@ function setLoading(v) {
 // ── Load remote agent card ──
 async function loadRemoteCard() {
   try {
-    const res = await fetch(`${REMOTE}/.well-known/agent.json`);
+    const res = await fetch(`${REMOTE}/.well-known/agent-card.json`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const card = await res.json();
 
-    document.getElementById('cardName').textContent = card.name || 'Unknown Agent';
+    document.getElementById('cardName').textContent = card.name || 'Unknown';
     document.getElementById('cardDesc').textContent = card.description || '';
-    document.getElementById('cardUrl').textContent = REMOTE;
+    document.getElementById('cardState').textContent = '上線';
+    document.getElementById('cardState').className = 'state ok';
 
     const skillsDiv = document.getElementById('cardSkills');
     skillsDiv.innerHTML = '';
@@ -145,25 +310,18 @@ async function loadRemoteCard() {
       skillsDiv.appendChild(badge);
     });
 
-    document.getElementById('cardState').textContent = '已連線';
-    document.getElementById('cardState').className = 'card-state ok';
-
     document.getElementById('statusDot').className = 'status-dot dot-green';
-    document.getElementById('statusText').textContent = `Connected — ${card.name}`;
-
-    return card;
-  } catch (err) {
-    document.getElementById('cardName').textContent = '❌ 無法連接遠端 Agent';
-    document.getElementById('cardDesc').textContent = err.message;
+    document.getElementById('statusText').textContent = `${card.name}`;
+  } catch {
+    document.getElementById('cardName').textContent = '❌ 離線';
     document.getElementById('cardState').textContent = '離線';
-    document.getElementById('cardState').className = 'card-state err';
+    document.getElementById('cardState').className = 'state err';
     document.getElementById('statusDot').className = 'status-dot dot-red';
     document.getElementById('statusText').textContent = 'Remote offline';
-    return null;
   }
 }
 
-// ── Send: normal chat (local LLM only) ──
+// ── Send: normal chat ──
 async function sendChat() {
   const input = document.getElementById('input');
   const text = input.value.trim();
@@ -171,13 +329,13 @@ async function sendChat() {
   input.value = '';
   input.style.height = 'auto';
   setLoading(true);
-  addMsg('user', text);
+  addChatMsg('user', text);
 
   await sendToAgent(text, false);
   setLoading(false);
 }
 
-// ── Send: discuss with remote agent ──
+// ── Send: discuss with remote ──
 async function sendDiscuss() {
   const input = document.getElementById('input');
   const text = input.value.trim();
@@ -185,14 +343,19 @@ async function sendDiscuss() {
   input.value = '';
   input.style.height = 'auto';
   setLoading(true);
-  addMsg('user', text, '你');
-  addMsg('system', '📡 正在與遠端 Agent 討論...');
+  addChatMsg('user', text);
+
+  // Show A2A thinking indicator
+  showA2AThinking('正在與遠端 Agent 互動...');
+  addChatSys('📡 正與遠端 Agent 討論...');
 
   await sendToAgent(`跟遠端 Agent 討論：${text}`, true);
+
+  hideA2AThinking();
   setLoading(false);
 }
 
-// ── Core: send to local A2A agent ──
+// ── Core: send to Orchestrator A2A ──
 async function sendToAgent(text, isDiscuss) {
   try {
     const res = await fetch(`${BASE}/a2a/jsonrpc`, {
@@ -215,18 +378,12 @@ async function sendToAgent(text, isDiscuss) {
     });
     const data = await res.json();
 
-    // Remove "thinking" messages
-    const area = document.getElementById('chatArea');
-    area.querySelectorAll('.msg.system').forEach(el => {
-      if (el.textContent.includes('討論中') || el.textContent.includes('正在與遠端')) el.remove();
-    });
-
     if (data.result) {
       const task = data.result;
       contextId = contextId || task.contextId;
 
-      // Extract trace and answer from artifacts
-      let responseText = '(no output)';
+      // Extract answer and trace
+      let responseText = '(無回應)';
       let hdTrace = null;
 
       if (task.artifacts) {
@@ -241,44 +398,36 @@ async function sendToAgent(text, isDiscuss) {
         }
       }
 
-      // If we have a multi-turn trace, show it before the answer
+      // ── Populate A2A panel with trace ──
       if (hdTrace && hdTrace.rounds && hdTrace.rounds.length > 0) {
-        addMsg('system', `📡 HelpDesk 多輪互動 (${hdTrace.rounds.length} 輪)`);
+        clearA2A();
         for (const r of hdTrace.rounds) {
-          // Question sent to HelpDesk
-          addMsg('remote', r.question.slice(0, 200), `🎯 Round ${r.round} → HelpDesk`);
-
-          if (r.status === 'input-required') {
-            // HelpDesk asked for clarification
-            addMsg('agent', `❓ ${r.response}`, `🎧 HelpDesk Round ${r.round}`);
-            // Auto-generated clarification
-            if (r.clarify) {
-              addMsg('user', r.clarify.slice(0, 200), `🤖 Orchestrator 自動補充`);
-            }
-          } else if (r.status === 'answered') {
-            addMsg('agent', r.response.slice(0, 300), `🎧 HelpDesk Round ${r.round} 回答`);
-          } else {
-            addMsg('agent', r.response.slice(0, 200), `🎧 HelpDesk Round ${r.round} (${r.status})`);
-          }
+          addA2ARound(r.round, r.question, r.response, r.status, r.clarify);
         }
-        addMsg('system', '✅ 最終答案');
+      } else if (isDiscuss) {
+        // No trace but was a discuss call — show single round
+        clearA2A();
+        addA2ARound(1, text, responseText, 'answered');
       }
 
-      if (isDiscuss) {
-        addMsg('remote', responseText, '遠端 Agent 回覆');
-      } else {
-        addMsg('agent', responseText, 'Agent Orchestrator');
-      }
+      // ── Remove "thinking" system messages from chat ──
+      chatArea.querySelectorAll('.chat-sys').forEach(el => {
+        if (el.textContent.includes('正在與遠端') || el.textContent.includes('討論中')) el.remove();
+      });
+
+      // ── Add agent response to chat ──
+      addChatMsg('agent', responseText);
     } else if (data.error) {
-      addMsg('system', `❌ ${data.error.message}`);
+      hideA2AThinking();
+      addChatSys(`❌ ${data.error.message}`);
     }
   } catch (err) {
-    addMsg('system', `❌ 連線失敗: ${err.message}`);
+    hideA2AThinking();
+    addChatSys(`❌ 連線失敗: ${err.message}`);
   }
 }
 
-// ── Keyboard ──
-// ⚠️ IME composition: track with ref so Chinese/Japanese Enter doesn't send
+// ── Keyboard (with IME protection) ──
 let composing = false;
 const _input = document.getElementById('input');
 _input.addEventListener('compositionstart', () => { composing = true; });
@@ -287,15 +436,14 @@ _input.addEventListener('keydown', (e) => {
   if (composing || e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
-// Auto-resize textarea
-document.getElementById('input').addEventListener('input', function() {
+_input.addEventListener('input', function() {
   this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 });
 
 // ── Init ──
 loadRemoteCard();
-setInterval(loadRemoteCard, 30000); // refresh card every 30s
+setInterval(loadRemoteCard, 30000);
 </script>
 </body>
 </html>
