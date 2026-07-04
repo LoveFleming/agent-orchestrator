@@ -405,15 +405,23 @@ class RealAgentExecutor implements AgentExecutor {
           remoteResponse = remoteResult.response;
         }
 
-        // Step 2: LLM synthesizes final answer with remote response
-        const synthesisMessages = [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `使用者問：「${userText}」` },
-          { role: 'user', content: `你決定問遠端 Agent：「${remoteQuestion}」` },
-          { role: 'user', content: `[REMOTE_RESPONSE: ${remoteResponse}]` },
-          { role: 'user', content: '請根據以上資訊，用中文整理一個完整的回答給使用者。引用遠端內容請標註。不要加 [REMOTE] 標記。' },
-        ];
-        result = await callLLM(synthesisMessages);
+        // Step 2: If HelpDesk returned a full answer, pass through directly (no LLM synthesis)
+        // For non-helpdesk remote calls, still use LLM synthesis
+        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture/i.test(remoteQuestion) && remoteResponse.length > 100 && !remoteResponse.startsWith('HelpDesk 已記錄')) {
+          // HelpDesk answer — pass through as-is
+          console.log(`[A2A] HelpDesk pass-through (${remoteResponse.length} chars)`);
+          result = remoteResponse;
+        } else {
+          // General remote — LLM synthesizes final answer
+          const synthesisMessages = [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: `使用者問：「${userText}」` },
+            { role: 'user', content: `你決定問遠端 Agent：「${remoteQuestion}」` },
+            { role: 'user', content: `[REMOTE_RESPONSE: ${remoteResponse}]` },
+            { role: 'user', content: '請根據以上資訊，用中文整理一個完整的回答給使用者。引用遠端內容請標註。不要加 [REMOTE] 標記。' },
+          ];
+          result = await callLLM(synthesisMessages);
+        }
       } else {
         // LLM answered locally — use as-is
         result = llmResponse;
