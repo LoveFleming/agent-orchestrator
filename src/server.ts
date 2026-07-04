@@ -41,6 +41,49 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || '';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || 'glm-5.1';
 
+// ════════════════════════════════════════════════════════
+// 1b. Remote Agent Card Discovery
+// ════════════════════════════════════════════════════════
+
+interface RemoteSkill {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  endpoints?: Record<string, string>;
+}
+
+let remoteSkills: RemoteSkill[] = [];
+let remoteAgentName = 'Remote Agent';
+
+async function discoverRemoteAgent() {
+  try {
+    const res = await fetch(`${REMOTE_AGENT_URL}/.well-known/agent.json`);
+    if (!res.ok) { console.log(`[Discovery] Agent Card fetch failed: ${res.status}`); return; }
+    const card = await res.json() as any;
+    remoteAgentName = card.name || 'Remote Agent';
+    remoteSkills = (card.skills || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      tags: s.tags || [],
+      endpoints: s.endpoints,
+    }));
+    console.log(`[Discovery] ${remoteAgentName} has ${remoteSkills.length} skills:`);
+    for (const s of remoteSkills) {
+      console.log(`  - ${s.id}: ${s.name} (${s.tags.join(', ')})`);
+    }
+  } catch (err: any) {
+    console.log(`[Discovery] Failed to fetch Agent Card: ${err.message}`);
+  }
+}
+
+function buildSkillsDescription(): string {
+  if (remoteSkills.length === 0) return '';
+  const lines = remoteSkills.map(s => `  - ${s.id} (${s.name}): ${s.description}`);
+  return `\n遠端 Agent (${remoteAgentName}) 提供以下 skills：\n${lines.join('\n')}\n`;
+}
+
 // Resolve paths relative to this file
 import { fileURLToPath as _fileURLToPath } from 'url';
 import { dirname as _dirname, resolve as _resolve } from 'path';
@@ -51,9 +94,9 @@ let providerConfig: any = null;
 try {
   const fs = await import('fs');
   const candidates = [
-    _resolve(_thisDir, '../../../tAgent/data/config/providers.json'),
-    _resolve(_thisDir, '../../tAgent/data/config/providers.json'),
-    _resolve(process.cwd(), '../tAgent/data/config/providers.json'),
+    _resolve(_thisDir, '../../../tPAAW/data/config/providers.json'),
+    _resolve(_thisDir, '../../tPAAW/data/config/providers.json'),
+    _resolve(process.cwd(), '../tPAAW/data/config/providers.json'),
     _resolve(process.cwd(), 'data/config/providers.json'),
   ];
   const configPath = candidates.find(p => fs.existsSync(p));
@@ -124,18 +167,35 @@ const AGENT_CARD: AgentCard = {
 // 2. LLM Agent Loop
 // ════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `你是 Agent Orchestrator，一個友善的 AI 助手。你是客戶端的請求入口，負責理解使用者需求並調度遠端 Agent 完成任務。
+function buildSystemPrompt(): string {
+return `你是 Agent Orchestrator，一個友善的 AI 助手。你是客戶端的請求入口，負責理解使用者需求，決定自己回答還是調度遠端 Agent。
 
-你的特殊能力：你可以透過 A2A (Agent-to-Agent) 協議與遠端的 Agent 溝通。
+${buildSkillsDescription()}
+## 路由規則
 
-當使用者要求你跟遠端 Agent 討論或協作時，你應該：
-1. 用中文整理你要問遠端 Agent 的內容
-2. 系統會幫你把訊息送到遠端 Agent
-3. 收到回應後，用中文整理給使用者
+你會根據使用者問題的類型，決定是否需要遠端 Agent：
 
-你也能獨立回答問題，不一定每次都要找遠端 Agent。
+1. **關於 PAAW 的問題**（功能、架構、用法、操作、問題回報）→ 呼叫遠端 Agent 的 HelpDesk skill
+2. **需要執行 PAAW skill**（翻譯、筆記、待辦等）→ 呼叫遠端 Agent
+3. **一般聊天、知識問答、翻譯**→ 你自己回答
+4. **不確定**→ 自己先回答，必要時再找遠端
 
-回答風格：簡潔、友善、用中文。`;
+## 如何呼叫遠端
+
+當你需要遠端 Agent 時，在你的回答開頭加上：
+
+[REMOTE: 你的問題]
+
+系統會自動把問題送到遠端 Agent，收到回應後，你會看到：
+
+[REMOTE_RESPONSE: 遠端的回答]
+
+然後你根據遠端回答，用中文整理給使用者。引用遠端內容時請標註出處。
+
+## 回答風格
+
+簡潔、友善、用中文。能自己回答的不要找遠端。`;
+}
 
 async function callLLM(messages: Array<{ role: string; content: string }>): Promise<string> {
   const config = getLLMConfig();
@@ -284,7 +344,7 @@ class RealAgentExecutor implements AgentExecutor {
       // Build messages for LLM
       const channel = chatChannels.get(contextId || '');
       const messages: Array<{ role: string; content: string }> = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt() },
       ];
 
       // Add conversation history from channel if exists
@@ -297,33 +357,61 @@ class RealAgentExecutor implements AgentExecutor {
 
       messages.push({ role: 'user', content: userText });
 
-      // Decide: should we call remote agent?
-      const needRemote = /跟遠端|和遠端|問遠端|遠端 Agent|協作|合作|一起|討論/.test(userText);
-
+      // LLM decides: answer locally or call remote?
+      const SYSTEM_PROMPT = buildSystemPrompt();
       let result: string;
 
-      if (needRemote) {
-        // Step 1: LLM decides what to ask remote
-        messages.push({ role: 'user', content: '你決定要跟遠端 Agent 討論。請用一句話說明你想問遠端 Agent 什麼？只輸出要問的話，不要加解釋。' });
-        const remoteQuestion = await callLLM(messages);
-        console.log(`[A2A] Asking remote: "${remoteQuestion.slice(0, 80)}"`);
+      // Step 1: LLM generates its response (may include [REMOTE: ...] to request remote help)
+      const llmResponse = await callLLM([
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(1, -1).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        { role: 'user', content: userText },
+      ]);
 
-        // Step 2: Send to remote agent
-        const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
-        const remoteResponse = remoteResult.response;
+      // Check if LLM wants to call remote
+      const remoteMatch = llmResponse.match(/\[REMOTE:\s*([\s\S]+?)\]/);
+      if (remoteMatch) {
+        const remoteQuestion = remoteMatch[1].trim();
+        console.log(`[A2A] LLM requests remote: "${remoteQuestion.slice(0, 80)}"`);
 
-        // Step 3: LLM synthesizes the answer
+        // Check if this maps to a specific skill endpoint (e.g. helpdesk)
+        const helpdeskSkill = remoteSkills.find(s => s.id === 'paaw-helpdesk' || s.tags.includes('helpdesk'));
+        let remoteResponse: string;
+
+        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture/i.test(remoteQuestion)) {
+          // Direct HelpDesk API call (faster, uses KNOWLEDGE.md)
+          console.log(`[A2A] Using HelpDesk endpoint for: "${remoteQuestion.slice(0, 60)}"`);
+          try {
+            const hdRes = await fetch(helpdeskSkill.endpoints.ask, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agentName: 'Agent Orchestrator', agentType: 'a2a', message: remoteQuestion, subject: remoteQuestion.slice(0, 80) }),
+            });
+            const hdData = await hdRes.json() as any;
+            remoteResponse = hdData.ticketId ? `已建立 HelpDesk 工單 #${hdData.ticketId}。${hdData.message || ''}` : (hdData.answer || hdData.error || '(HelpDesk 無回應)');
+          } catch (err: any) {
+            // Fallback to A2A message/send
+            const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
+            remoteResponse = remoteResult.response;
+          }
+        } else {
+          // General A2A message/send
+          const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
+          remoteResponse = remoteResult.response;
+        }
+
+        // Step 2: LLM synthesizes final answer with remote response
         const synthesisMessages = [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `使用者問：「${userText}」` },
-          { role: 'user', content: `我問了遠端 Agent：「${remoteQuestion}」` },
-          { role: 'user', content: `遠端 Agent 回答：「${remoteResponse}」` },
-          { role: 'user', content: '請根據以上資訊，用中文整理一個完整的回答給使用者。如果有引用遠端 Agent 的內容，請標註。' },
+          { role: 'user', content: `你決定問遠端 Agent：「${remoteQuestion}」` },
+          { role: 'user', content: `[REMOTE_RESPONSE: ${remoteResponse}]` },
+          { role: 'user', content: '請根據以上資訊，用中文整理一個完整的回答給使用者。引用遠端內容請標註。不要加 [REMOTE] 標記。' },
         ];
         result = await callLLM(synthesisMessages);
       } else {
-        // Just use local LLM
-        result = await callLLM(messages);
+        // LLM answered locally — use as-is
+        result = llmResponse;
       }
 
       // Check cancellation
@@ -510,5 +598,8 @@ app.listen(PORT, () => {
   } else {
     console.log(`   ⚠️  LLM     : NOT CONFIGURED (set .env or ensure providers.json exists)`);
   }
-  console.log(`   Remote     : ${REMOTE_AGENT_URL}\n`);
+  console.log(`   Remote     : ${REMOTE_AGENT_URL}`);
+
+  // Discover remote agent skills on startup
+  discoverRemoteAgent();
 });
