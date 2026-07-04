@@ -25,7 +25,10 @@
   .agent-bar .skills { display: flex; gap: 4px; flex-shrink: 0; }
   .agent-bar .skill-badge { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #21262d; color: #8b949e; }
   .agent-bar .state { font-size: 10px; flex-shrink: 0; }
-  .state.ok { color: #238636; } .state.err { color: #da3633; } .state.wait { color: #d29922; }
+  .agent-bar .state.ok { color: #238636; } .agent-bar .state.err { color: #da3633; } .agent-bar .state.wait { color: #d29922; }
+  .mode-toggle { display: flex; gap: 4px; flex-shrink: 0; }
+  .mode-btn { font-size: 10px; padding: 3px 8px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; transition: all .15s; }
+  .mode-btn.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
 
   /* ── Split Panels ── */
   .split-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -113,6 +116,10 @@
   </div>
   <div class="skills" id="cardSkills"></div>
   <div class="state wait" id="cardState">等待</div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeAsync" onclick="setMode('async')">⚡ Webhook</button>
+    <button class="mode-btn" id="modeSync" onclick="setMode('sync')">🔒 Sync</button>
+  </div>
 </div>
 
 <!-- Split Container -->
@@ -125,6 +132,7 @@
       <span class="title">A2A 互動過程</span>
       <span class="pulse" id="a2aPulse"></span>
       <span class="count" id="a2aCount"></span>
+      <span class="mode-label" id="modeLabel" style="font-size:10px;color:#8b949e;margin-left:8px;">⚡webhook</span>
     </div>
     <div class="panel-body" id="a2aArea">
       <div class="a2a-empty">尚無 A2A 互動紀錄</div>
@@ -164,6 +172,26 @@ let a2aCount = 0;
 const a2aArea = document.getElementById('a2aArea');
 const chatArea = document.getElementById('chatArea');
 const a2aPulse = document.getElementById('a2aPulse');
+let remoteMode = 'async'; // 'async' (webhook) or 'sync' (blocking)
+
+// ── Mode toggle ──
+function setMode(mode) {
+  remoteMode = mode;
+  document.getElementById('modeAsync').classList.toggle('active', mode === 'async');
+  document.getElementById('modeSync').classList.toggle('active', mode === 'sync');
+  document.getElementById('modeLabel').textContent = mode === 'async' ? '⚡webhook+poll' : '🔒sync blocking';
+  // Sync to server
+  fetch(`${BASE}/api/mode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  }).catch(() => {});
+}
+
+// Load mode from server on init
+fetch(`${BASE}/api/mode`).then(r => r.json()).then(d => {
+  if (d.mode) { remoteMode = d.mode; setMode(d.mode); }
+}).catch(() => {});
 
 // ── Helpers ──
 function addChatMsg(role, text) {
@@ -210,11 +238,11 @@ function showA2AThinking(label) {
   a2aPulse.classList.add('active');
   const empty = a2aArea.querySelector('.a2a-empty');
   if (empty) empty.remove();
-
+  const modeTag = remoteMode === 'async' ? '⚡' : '🔒';
   const div = document.createElement('div');
   div.className = 'a2a-thinking';
   div.id = 'a2aThinking';
-  div.innerHTML = `<span class="label">${label}</span><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
+  div.innerHTML = `<span class="label">${modeTag} ${label}</span><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
   a2aArea.appendChild(div);
   a2aArea.scrollTop = a2aArea.scrollHeight;
 }

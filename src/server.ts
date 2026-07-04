@@ -258,6 +258,9 @@ function truncateMsg(msg: string, max = 500): string {
   return msg.length > max ? msg.slice(0, max) + '...' : msg;
 }
 
+// ── Remote call mode: 'async' (webhook+poll) or 'sync' (blocking) ──
+let remoteCallMode: 'async' | 'sync' = 'async';
+
 async function getPaawClient() {
   if (!paawClient) {
     paawClient = await clientFactory.createFromUrl(REMOTE_AGENT_URL);
@@ -276,6 +279,8 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
   const client = await getPaawClient();
   const cid = contextId || `ctx-${Date.now()}`;
 
+  // ── Build send params based on remoteCallMode ──
+  const asyncMode = remoteCallMode === 'async';
   const sendParams: MessageSendParams = {
     message: {
       kind: 'message',
@@ -284,15 +289,18 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
       parts: [{ kind: 'text', text }],
       ...(cid ? { contextId: cid } : {}),
     },
-    configuration: {
-      pushNotification: {
-        url: `http://localhost:${PORT}/a2a/webhook`,
-        token: 'orch-webhook',
+    ...(asyncMode ? {
+      configuration: {
+        pushNotification: {
+          url: `http://localhost:${PORT}/a2a/webhook`,
+          token: 'orch-webhook',
+        },
+        blocking: false,
       },
-      blocking: false,
-    },
+    } : {}),
   } as any;
 
+  console.log(`[A2A-SDK] mode=${remoteCallMode} sending: "${text.slice(0, 60)}"`);
   const response = await client.sendMessage(sendParams);
   const task = response as any;
   const taskState = task?.status?.state;
@@ -300,20 +308,18 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
   console.log(`[A2A-SDK] Initial response: state=${taskState} taskId=${task?.id}`);
   if (onStatus) onStatus(taskState);
 
-  // ── If working, poll tasks/get until terminal state ──
-  if (taskState === 'working' && task?.id) {
+  // ── ASYNC: If working, poll tasks/get until terminal state ──
+  if (asyncMode && taskState === 'working' && task?.id) {
     const pollTaskId = task.id;
     const MAX_POLLS = 90; // 90 × 2s = 180s timeout
 
     for (let i = 0; i < MAX_POLLS; i++) {
       await new Promise(r => setTimeout(r, 2000));
 
-      // Poll via SDK
       let polled: any;
       try {
         polled = await client.getTask({ id: pollTaskId });
       } catch {
-        // Fallback: raw fetch
         try {
           const pr = await fetch(`${REMOTE_AGENT_URL}/a2a`, {
             method: 'POST',
@@ -333,7 +339,6 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
       console.log(`[A2A-SDK] Poll ${i + 1}/${MAX_POLLS}: state=${pollState}`);
 
       if (['completed', 'failed', 'canceled', 'input-required'].includes(pollState)) {
-        // Terminal state — use polled result
         const channel = chatChannels.get(cid) || { contextId: cid, remoteAgentUrl: REMOTE_AGENT_URL, history: [] };
         channel.history.push({ role: 'user', text, timestamp: new Date().toISOString() });
 
@@ -354,7 +359,7 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
     throw new Error(`Timeout: PAAW task ${pollTaskId} did not complete within 180s`);
   }
 
-  // ── Sync mode: PAAW returned terminal state immediately ──
+  // ── SYNC (or async but immediate terminal state): use response directly ──
   const channel = chatChannels.get(cid) || { contextId: cid, remoteAgentUrl: REMOTE_AGENT_URL, history: [] };
   channel.history.push({ role: 'user', text, timestamp: new Date().toISOString() });
 
@@ -757,6 +762,21 @@ app.get('/api/channels/:contextId', (req, res) => {
 
 app.get('/api/webhooks', (_req, res) => {
   res.json({ ok: true, data: webhookEvents.slice(-20) });
+});
+
+// ── Remote call mode (sync vs async/webhook) ──
+app.get('/api/mode', (_req, res) => {
+  res.json({ ok: true, mode: remoteCallMode });
+});
+app.post('/api/mode', express.json(), (req, res) => {
+  const m = req.body.mode;
+  if (m === 'async' || m === 'sync') {
+    remoteCallMode = m;
+    console.log(`[Mode] Switched to ${remoteCallMode}`);
+    res.json({ ok: true, mode: remoteCallMode });
+  } else {
+    res.status(400).json({ ok: false, error: 'mode must be async or sync' });
+  }
 });
 
 // ── Health ──
