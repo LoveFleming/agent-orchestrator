@@ -378,41 +378,76 @@ class RealAgentExecutor implements AgentExecutor {
         const helpdeskSkill = remoteSkills.find(s => s.id === 'paaw-helpdesk' || s.tags.includes('helpdesk'));
         let remoteResponse: string;
 
-        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture/i.test(remoteQuestion)) {
-          // Direct HelpDesk API call (faster, uses KNOWLEDGE.md)
-          console.log(`[A2A] Using HelpDesk endpoint for: "${remoteQuestion.slice(0, 60)}"`);
-          try {
+        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture|bug|skill|workspace|cron|crew|app/i.test(remoteQuestion)) {
+          // ── Multi-turn HelpDesk interaction ──
+          // HelpDesk may return "input-required" with a clarifying question.
+          // Orchestrator LLM auto-answers it based on the original user context.
+          // Loop up to MAX_ROUNDS times.
+          const MAX_ROUNDS = 3;
+          let hdTicketId: string | null = null;
+          let hdMessage = remoteQuestion;
+          let hdRound = 0;
+
+          console.log(`[A2A] HelpDesk multi-turn start: "${remoteQuestion.slice(0, 60)}"`);
+
+          for (let round = 0; round < MAX_ROUNDS; round++) {
+            hdRound++;
+            const hdBody: any = {
+              agentName: 'Agent Orchestrator',
+              agentType: 'a2a',
+              message: hdMessage,
+              subject: remoteQuestion.slice(0, 80),
+            };
+            if (hdTicketId) hdBody.ticketId = hdTicketId;
+
             const hdRes = await fetch(helpdeskSkill.endpoints.ask, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ agentName: 'Agent Orchestrator', agentType: 'a2a', message: remoteQuestion, subject: remoteQuestion.slice(0, 80) }),
+              body: JSON.stringify(hdBody),
             });
             const hdData = await hdRes.json() as any;
-            if (hdData.answer) {
-              remoteResponse = hdData.answer;
-              console.log(`[A2A] HelpDesk answered (${hdData.answer.length} chars, ticket: ${hdData.ticketId})`);
-            } else {
-              remoteResponse = `HelpDesk 已記錄問題（工單 ${hdData.ticketId}），但無法自動回答。${hdData.error || ''}`;
+
+            if (!hdTicketId) hdTicketId = hdData.ticketId;
+
+            if (hdData.status === 'input-required' && hdData.question) {
+              // HelpDesk wants clarification — LLM auto-generates answer
+              console.log(`[A2A] HelpDesk round ${hdRound} needs info: "${hdData.question.slice(0, 80)}"`);
+
+              const clarifyRes = await callLLM([
+                { role: 'system', content: '你是 Agent Orchestrator。你正在跟 PAAW HelpDesk 的 AI 互動。' },
+                { role: 'user', content: `原始使用者問題：「${userText}」\n你問了 HelpDesk：「${remoteQuestion}」\nHelpDesk 反問：「${hdData.question}」\n\n請根據使用者的原始問題，直接回答 HelpDesk 的問題。只輸出答案，不要加解釋。如果使用者的問題裡沒有足夠資訊，就回答「沒有特別指定」。` },
+              ]);
+
+              hdMessage = clarifyRes.trim();
+              console.log(`[A2A] HelpDesk round ${hdRound} auto-clarify: "${hdMessage.slice(0, 80)}"`);
+
+              // Continue loop — send clarification back to HelpDesk
+              continue;
             }
-          } catch (err: any) {
-            // Fallback to A2A message/send
-            const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
-            remoteResponse = remoteResult.response;
+
+            if (hdData.answer) {
+              // Got final answer — pass through directly
+              remoteResponse = hdData.answer;
+              console.log(`[A2A] HelpDesk answered (round ${hdRound}, ${hdData.answer.length} chars, ticket: ${hdData.ticketId})`);
+              break;
+            }
+
+            // No answer, no input-required — something went wrong
+            remoteResponse = `HelpDesk 已記錄問題（工單 ${hdData.ticketId}），但無法自動回答。${hdData.error || ''}`;
+            break;
           }
+
+          if (hdRound >= MAX_ROUNDS && !remoteResponse) {
+            remoteResponse = `HelpDesk 在 ${MAX_ROUNDS} 輪互動後仍無法產出完整答案（工單 ${hdTicketId}）。`;
+          }
+
+          result = remoteResponse;
         } else {
           // General A2A message/send
           const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
           remoteResponse = remoteResult.response;
-        }
 
-        // Step 2: If HelpDesk returned a full answer, pass through directly (no LLM synthesis)
-        // For non-helpdesk remote calls, still use LLM synthesis
-        if (helpdeskSkill?.endpoints?.ask && /paaw|help|問題|怎麼|如何|feature|architecture/i.test(remoteQuestion) && remoteResponse.length > 100 && !remoteResponse.startsWith('HelpDesk 已記錄')) {
-          // HelpDesk answer — pass through as-is
-          console.log(`[A2A] HelpDesk pass-through (${remoteResponse.length} chars)`);
-          result = remoteResponse;
-        } else {
-          // General remote — LLM synthesizes final answer
+          // LLM synthesizes final answer for non-helpdesk
           const synthesisMessages = [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: `使用者問：「${userText}」` },
