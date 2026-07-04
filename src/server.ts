@@ -90,8 +90,8 @@ function getLLMConfig() {
 // ════════════════════════════════════════════════════════
 
 const PAAW_A2A_AGENT_CARD: AgentCard = {
-  name: 'A2A Demo Agent',
-  description: 'A2A Demo Agent — 可以獨立思考、回答問題，也可以透過 A2A 協議與遠端 Agent 協作',
+  name: 'Help Desk',
+  description: 'Help Desk — PAAW 客戶服務 Agent，可以獨立思考、回答問題，也可以透過 A2A 協議與遠端 Agent 協作',
   protocolVersion: '0.3.0',
   version: '1.0.0',
   url: `http://localhost:${PORT}/a2a/jsonrpc`,
@@ -126,7 +126,7 @@ const PAAW_A2A_AGENT_CARD: AgentCard = {
 // 2. LLM Agent Loop
 // ════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `你是 A2A Demo Agent，一個友善的 AI 助手。
+const SYSTEM_PROMPT = `你是 Help Desk，一個友善的 PAAW 客戶服務 AI 助手。
 
 你的特殊能力：你可以透過 A2A (Agent-to-Agent) 協議與遠端的「PAAW Agent」溝通。
 
@@ -147,7 +147,7 @@ async function callLLM(messages: Array<{ role: string; content: string }>): Prom
   const extraHeaders: Record<string, string> = {};
   if (config.providerId === 'openrouter') {
     extraHeaders['HTTP-Referer'] = 'https://paaw-a2a.ai';
-    extraHeaders['X-Title'] = 'A2A Demo Agent';
+    extraHeaders['X-Title'] = 'Help Desk';
   }
 
   const body = {
@@ -502,7 +502,7 @@ app.get('/', (_req, res) => {
 
 // Start
 app.listen(PORT, () => {
-  console.log(`\n🚀 A2A Demo Agent 已啟動`);
+  console.log(`\n🚀 Help Desk 已啟動`);
   console.log(`   UI         : http://localhost:${PORT}`);
   console.log(`   Agent Card : http://localhost:${PORT}/${AGENT_CARD_PATH}`);
   console.log(`   JSON-RPC   : http://localhost:${PORT}/a2a/jsonrpc`);

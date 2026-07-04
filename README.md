@@ -1,12 +1,12 @@
-# A2A Demo Agent
+# Help Desk
 
-A2A Protocol v0.3 demo — 兩個 Agent 透過 A2A 協議互相溝通、協作。
+A2A Protocol v0.3 — PAAW 客戶服務 Agent，透過 A2A 協議與遠端 Agent 溝通、協作。
 
 ## 架構
 
 ```
 ┌─────────────────────┐    A2A JSON-RPC     ┌──────────────────────┐
-│  A2A Demo Agent     │ ◄──────────────────► │  PAAW Agent          │
+│  Help Desk          │ ◄──────────────────► │  PAAW Agent          │
 │  (port 4100)        │    message/send      │  (port 4097)         │
 │  + Agent Loop (LLM) │    push webhook      │  + Agent Loop (LLM)  │
 │  + UI (聊天介面)    │                       │  + A2A Playground UI │
@@ -44,9 +44,9 @@ npm run dev
 | `GET /api/channels` | Active chat channels |
 | `GET /api/webhooks` | Received webhook events |
 
-## Demo 流程
+## 使用流程
 
-1. 開 `http://localhost:4100` — A2A Demo Agent UI
+1. 開 `http://localhost:4100` — Help Desk UI
 2. 開 `http://localhost:4097` → 點「🔗 A2A Playground」— PAAW UI
 3. 在任一邊輸入「跟遠端 Agent 討論 A2A 的好處」
 4. 兩邊 Agent 透過 A2A 協議互相對話
