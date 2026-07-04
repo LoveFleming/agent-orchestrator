@@ -268,9 +268,11 @@ async function getPaawClient() {
 
 /**
  * Send message to PAAW via A2A SDK client.
- * Returns task object (may be in any state: completed, input-required, etc.)
+ * Uses webhook + polling: sends with pushNotification config, PAAW returns 'working'
+ * immediately, then we poll tasks/get until completed/input-required/failed.
+ * Falls back to sync mode if PAAW doesn't support webhooks.
  */
-async function sendViaA2ASDK(text: string, contextId?: string): Promise<{ task: any; contextId: string }> {
+async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: string) => void): Promise<{ task: any; contextId: string }> {
   const client = await getPaawClient();
   const cid = contextId || `ctx-${Date.now()}`;
 
@@ -282,18 +284,80 @@ async function sendViaA2ASDK(text: string, contextId?: string): Promise<{ task: 
       parts: [{ kind: 'text', text }],
       ...(cid ? { contextId: cid } : {}),
     },
-  };
+    configuration: {
+      pushNotification: {
+        url: `http://localhost:${PORT}/a2a/webhook`,
+        token: 'orch-webhook',
+      },
+      blocking: false,
+    },
+  } as any;
 
   const response = await client.sendMessage(sendParams);
-
-  // SDK returns either a Message or a Task
   const task = response as any;
+  const taskState = task?.status?.state;
 
-  // Update channel history
+  console.log(`[A2A-SDK] Initial response: state=${taskState} taskId=${task?.id}`);
+  if (onStatus) onStatus(taskState);
+
+  // ── If working, poll tasks/get until terminal state ──
+  if (taskState === 'working' && task?.id) {
+    const pollTaskId = task.id;
+    const MAX_POLLS = 90; // 90 × 2s = 180s timeout
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Poll via SDK
+      let polled: any;
+      try {
+        polled = await client.getTask({ id: pollTaskId });
+      } catch {
+        // Fallback: raw fetch
+        try {
+          const pr = await fetch(`${REMOTE_AGENT_URL}/a2a`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'tasks/get', params: { id: pollTaskId }, id: `poll-${i}` }),
+          });
+          const pd = await pr.json() as any;
+          polled = pd.result;
+        } catch (e: any) {
+          console.log(`[A2A-SDK] Poll ${i + 1} error: ${e.message}`);
+          continue;
+        }
+      }
+
+      const pollState = polled?.status?.state;
+      if (onStatus) onStatus(pollState);
+      console.log(`[A2A-SDK] Poll ${i + 1}/${MAX_POLLS}: state=${pollState}`);
+
+      if (['completed', 'failed', 'canceled', 'input-required'].includes(pollState)) {
+        // Terminal state — use polled result
+        const channel = chatChannels.get(cid) || { contextId: cid, remoteAgentUrl: REMOTE_AGENT_URL, history: [] };
+        channel.history.push({ role: 'user', text, timestamp: new Date().toISOString() });
+
+        let responseText = '';
+        if (polled?.artifacts?.[0]?.parts?.[0]?.text) {
+          responseText = polled.artifacts[0].parts[0].text;
+        } else if (polled?.history) {
+          const lastAgent = [...polled.history].reverse().find((m: any) => m.role === 'agent');
+          if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
+        }
+        channel.history.push({ role: 'remote', text: responseText, timestamp: new Date().toISOString() });
+        chatChannels.set(cid, channel);
+
+        return { task: polled, contextId: cid };
+      }
+    }
+
+    throw new Error(`Timeout: PAAW task ${pollTaskId} did not complete within 180s`);
+  }
+
+  // ── Sync mode: PAAW returned terminal state immediately ──
   const channel = chatChannels.get(cid) || { contextId: cid, remoteAgentUrl: REMOTE_AGENT_URL, history: [] };
   channel.history.push({ role: 'user', text, timestamp: new Date().toISOString() });
 
-  // Extract response text
   let responseText = '';
   if (task?.artifacts?.[0]?.parts?.[0]?.text) {
     responseText = task.artifacts[0].parts[0].text;
@@ -301,7 +365,6 @@ async function sendViaA2ASDK(text: string, contextId?: string): Promise<{ task: 
     const lastAgent = [...task.history].reverse().find((m: any) => m.role === 'agent');
     if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
   }
-
   channel.history.push({ role: 'remote', text: responseText, timestamp: new Date().toISOString() });
   chatChannels.set(cid, channel);
 
