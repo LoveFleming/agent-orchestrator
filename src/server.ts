@@ -388,7 +388,12 @@ class RealAgentExecutor implements AgentExecutor {
               body: JSON.stringify({ agentName: 'Agent Orchestrator', agentType: 'a2a', message: remoteQuestion, subject: remoteQuestion.slice(0, 80) }),
             });
             const hdData = await hdRes.json() as any;
-            remoteResponse = hdData.ticketId ? `已建立 HelpDesk 工單 #${hdData.ticketId}。${hdData.message || ''}` : (hdData.answer || hdData.error || '(HelpDesk 無回應)');
+            if (hdData.answer) {
+              remoteResponse = hdData.answer;
+              console.log(`[A2A] HelpDesk answered (${hdData.answer.length} chars, ticket: ${hdData.ticketId})`);
+            } else {
+              remoteResponse = `HelpDesk 已記錄問題（工單 ${hdData.ticketId}），但無法自動回答。${hdData.error || ''}`;
+            }
           } catch (err: any) {
             // Fallback to A2A message/send
             const remoteResult = await sendToRemoteAgent(remoteQuestion, contextId);
