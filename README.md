@@ -1,15 +1,15 @@
-# Help Desk
+# Agent Hub
 
-A2A Protocol v0.3 — PAAW 客戶服務 Agent，透過 A2A 協議與遠端 Agent 溝通、協作。
+A2A Protocol v0.3 — 獨立 Agent，透過 A2A 協議與遠端 Agent 溝通、協作。
 
 ## 架構
 
 ```
 ┌─────────────────────┐    A2A JSON-RPC     ┌──────────────────────┐
-│  Help Desk          │ ◄──────────────────► │  PAAW Agent          │
+│  Agent Hub          │ ◄──────────────────► │  Remote Agent        │
 │  (port 4100)        │    message/send      │  (port 4097)         │
 │  + Agent Loop (LLM) │    push webhook      │  + Agent Loop (LLM)  │
-│  + UI (聊天介面)    │                       │  + A2A Playground UI │
+│  + UI (聊天介面)    │                       │  + UI                │
 │  + A2A Client       │                       │  + A2A Server        │
 └─────────────────────┘                       └──────────────────────┘
 ```
@@ -20,14 +20,11 @@ A2A Protocol v0.3 — PAAW 客戶服務 Agent，透過 A2A 協議與遠端 Agent
 # 1. Install
 npm install
 
-# 2. (Optional) Configure .env — or auto-reads PAAW's providers.json
+# 2. (Optional) Configure .env
 cp .env.example .env
 # edit .env
 
-# 3. Start PAAW first (port 4097)
-cd /path/to/tAgent && npm run dev
-
-# 4. Start this server (port 4100)
+# 3. Start
 npm run dev
 ```
 
@@ -46,10 +43,9 @@ npm run dev
 
 ## 使用流程
 
-1. 開 `http://localhost:4100` — Help Desk UI
-2. 開 `http://localhost:4097` → 點「🔗 A2A Playground」— PAAW UI
-3. 在任一邊輸入「跟遠端 Agent 討論 A2A 的好處」
-4. 兩邊 Agent 透過 A2A 協議互相對話
+1. 開 `http://localhost:4100` — Agent Hub UI
+2. 直接聊天，或按「💬 討論」跟遠端 Agent 對話
+3. 兩邊 Agent 透過 A2A 協議互相對話
 
 ## Agent Loop
 

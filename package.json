@@ -1,7 +1,7 @@
 {
-  "name": "paaw-a2a-server",
+  "name": "agent-hub",
   "version": "1.0.0",
-  "description": "PAAW A2A Server — A2A Protocol Demo with real Agent Loop + UI",
+  "description": "Agent Hub — A2A Protocol Agent with real Agent Loop + UI",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -1,10 +1,10 @@
 /**
- * PAAW A2A Server — Agent2Agent Protocol Demo
+ * Agent Hub — Agent2Agent Protocol Agent
  *
  * 功能：
- *   1. A2A Server — 用 @a2a-js/sdk 暴露 Agent Card + JSON-RPC
+ *   1. A2A Server — 暴露 Agent Card + JSON-RPC
  *   2. Agent Loop — 接 LLM API，真的會思考和回答
- *   3. A2A Client — 可以主動呼叫遠端 Agent（PAAW），建立聊天通道
+ *   3. A2A Client — 可以主動呼叫遠端 Agent，建立聊天通道
  *   4. UI — 聊天介面 + 與遠端 Agent 的對話視窗
  *   5. Webhook — 接收遠端 Agent 的 push notification
  */
@@ -28,8 +28,6 @@ import {
   restHandler,
   UserBuilder,
 } from '@a2a-js/sdk/server/express';
-// A2AClient imported for reference, but we use direct fetch for cross-compat with PAAW
-// import { A2AClient } from '@a2a-js/sdk/client';
 
 // ════════════════════════════════════════════════════════
 // Config
@@ -38,21 +36,20 @@ import {
 const PORT = parseInt(process.env.A2A_PORT || '4100');
 const REMOTE_AGENT_URL = process.env.REMOTE_AGENT_URL || 'http://localhost:4097';
 
-// LLM Provider (reuse PAAW's providers.json or use .env)
+// LLM Provider (use .env or auto-detect sibling providers.json)
 const LLM_BASE_URL = process.env.LLM_BASE_URL || '';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || 'glm-5.1';
 
-// Resolve PAAW root relative to this file
+// Resolve paths relative to this file
 import { fileURLToPath as _fileURLToPath } from 'url';
 import { dirname as _dirname, resolve as _resolve } from 'path';
 const _thisDir = _dirname(_fileURLToPath(import.meta.url));
 
-// Try to load from PAAW's providers.json if no .env
+// Try to load from sibling config (e.g. ../data/config/providers.json)
 let providerConfig: any = null;
 try {
   const fs = await import('fs');
-  // Try multiple relative paths to find PAAW's providers.json
   const candidates = [
     _resolve(_thisDir, '../../../tAgent/data/config/providers.json'),
     _resolve(_thisDir, '../../tAgent/data/config/providers.json'),
@@ -67,6 +64,7 @@ try {
   const raw = fs.readFileSync(configPath, 'utf-8');
   providerConfig = JSON.parse(raw);
 } catch {}
+
 
 function getLLMConfig() {
   if (LLM_BASE_URL && LLM_API_KEY) {
@@ -89,9 +87,9 @@ function getLLMConfig() {
 // 1. Agent Card
 // ════════════════════════════════════════════════════════
 
-const PAAW_A2A_AGENT_CARD: AgentCard = {
-  name: 'Help Desk',
-  description: 'Help Desk — PAAW 客戶服務 Agent，可以獨立思考、回答問題，也可以透過 A2A 協議與遠端 Agent 協作',
+const AGENT_HUB_CARD: AgentCard = {
+  name: 'Agent Hub',
+  description: 'Agent Hub — 獨立思考、回答問題，也可以透過 A2A 協議與遠端 Agent 協作',
   protocolVersion: '0.3.0',
   version: '1.0.0',
   url: `http://localhost:${PORT}/a2a/jsonrpc`,
@@ -126,9 +124,9 @@ const PAAW_A2A_AGENT_CARD: AgentCard = {
 // 2. LLM Agent Loop
 // ════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `你是 Help Desk，一個友善的 PAAW 客戶服務 AI 助手。
+const SYSTEM_PROMPT = `你是 Agent Hub，一個友善的 AI 助手。
 
-你的特殊能力：你可以透過 A2A (Agent-to-Agent) 協議與遠端的「PAAW Agent」溝通。
+你的特殊能力：你可以透過 A2A (Agent-to-Agent) 協議與遠端的 Agent 溝通。
 
 當使用者要求你跟遠端 Agent 討論或協作時，你應該：
 1. 用中文整理你要問遠端 Agent 的內容
@@ -141,13 +139,13 @@ const SYSTEM_PROMPT = `你是 Help Desk，一個友善的 PAAW 客戶服務 AI �
 
 async function callLLM(messages: Array<{ role: string; content: string }>): Promise<string> {
   const config = getLLMConfig();
-  if (!config) throw new Error('No LLM provider configured. Set .env or ensure PAAW providers.json exists.');
+  if (!config) throw new Error('No LLM provider configured. Set .env or ensure providers.json exists.');
 
   const baseURL = config.baseURL.replace(/\/+$/, '');
   const extraHeaders: Record<string, string> = {};
   if (config.providerId === 'openrouter') {
-    extraHeaders['HTTP-Referer'] = 'https://paaw-a2a.ai';
-    extraHeaders['X-Title'] = 'Help Desk';
+    extraHeaders['HTTP-Referer'] = 'https://agent-hub.ai';
+    extraHeaders['X-Title'] = 'Agent Hub';
   }
 
   const body = {
@@ -195,8 +193,6 @@ async function sendToRemoteAgent(text: string, contextId?: string): Promise<{ re
   const cid = contextId || `ctx-${Date.now()}`;
 
   try {
-    // Direct JSON-RPC call to PAAW's A2A endpoint
-    // PAAW format: { type: "text" } (not { kind: "text" })
     const res = await fetch(remoteEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -223,7 +219,6 @@ async function sendToRemoteAgent(text: string, contextId?: string): Promise<{ re
     const task = data.result;
     let responseText = '';
 
-    // Extract from PAAW's task format
     if (task?.artifacts?.[0]?.parts?.[0]?.text) {
       responseText = task.artifacts[0].parts[0].text;
     } else if (task?.history) {
@@ -303,7 +298,7 @@ class RealAgentExecutor implements AgentExecutor {
       messages.push({ role: 'user', content: userText });
 
       // Decide: should we call remote agent?
-      const needRemote = /跟遠端|和遠端|問遠端|遠端 Agent|PAAW Agent|協作|合作|一起|討論/.test(userText);
+      const needRemote = /跟遠端|和遠端|問遠端|遠端 Agent|協作|合作|一起|討論/.test(userText);
 
       let result: string;
 
@@ -422,7 +417,7 @@ const agentExecutor = new RealAgentExecutor();
 const taskStore = new InMemoryTaskStore();
 
 const requestHandler = new DefaultRequestHandler(
-  PAAW_A2A_AGENT_CARD,
+  AGENT_HUB_CARD,
   taskStore,
   agentExecutor,
   undefined,
@@ -485,8 +480,8 @@ app.get('/health', (_req, res) => {
   const config = getLLMConfig();
   res.json({
     status: 'ok',
-    agent: PAAW_A2A_AGENT_CARD.name,
-    version: PAAW_A2A_AGENT_CARD.version,
+    agent: AGENT_HUB_CARD.name,
+    version: AGENT_HUB_CARD.version,
     llm: config ? `${config.providerId || 'custom'}/${config.model}` : 'NOT CONFIGURED',
     remoteAgent: REMOTE_AGENT_URL,
     channels: chatChannels.size,
@@ -502,7 +497,7 @@ app.get('/', (_req, res) => {
 
 // Start
 app.listen(PORT, () => {
-  console.log(`\n🚀 Help Desk 已啟動`);
+  console.log(`\n🚀 Agent Hub 已啟動`);
   console.log(`   UI         : http://localhost:${PORT}`);
   console.log(`   Agent Card : http://localhost:${PORT}/${AGENT_CARD_PATH}`);
   console.log(`   JSON-RPC   : http://localhost:${PORT}/a2a/jsonrpc`);
@@ -513,7 +508,7 @@ app.listen(PORT, () => {
   if (config) {
     console.log(`   LLM        : ${config.providerId || 'custom'}/${config.model}`);
   } else {
-    console.log(`   ⚠️  LLM     : NOT CONFIGURED (set .env or ensure PAAW providers.json exists)`);
+    console.log(`   ⚠️  LLM     : NOT CONFIGURED (set .env or ensure providers.json exists)`);
   }
   console.log(`   Remote     : ${REMOTE_AGENT_URL}\n`);
 });
