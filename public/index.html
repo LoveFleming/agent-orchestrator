@@ -890,7 +890,7 @@ setInterval(loadRemoteCard, 30000);
 // ── Auto Loop: two agents talking to each other ──
 let autoLoopActive = false;
 let autoLoopRounds = 0;
-const MAX_AUTO_ROUNDS = 5;
+const MAX_AUTO_ROUNDS = 3;
 
 async function toggleAutoLoop() {
   if (autoLoopActive) {
@@ -911,49 +911,93 @@ async function toggleAutoLoop() {
   document.getElementById('btnAutoLoop').textContent = '⏹ 停止對話';
   document.getElementById('btnAutoLoop').style.background = '#da3633';
 
+  // Bottom panel: only show user's question
   addChatMsg('user', text);
-  addChatSys('🔄 自動對話模式啟動 (最多 ' + MAX_AUTO_ROUNDS + ' 輪)');
+
+  // Top panel placeholder
+  showA2AThinking('正在與遠端 Agent 進行多輪互動...');
 
   let currentText = text;
-  let skipUserMsg = true; // first message already added
+  const allResponses = [];
 
   while (autoLoopActive && autoLoopRounds < MAX_AUTO_ROUNDS) {
     autoLoopRounds++;
     setLoading(true);
-    showA2AThinking(`第 ${autoLoopRounds} 輪 - 正在與遠端 Agent 互動...`);
+    showA2AThinking(`第 ${autoLoopRounds}/${MAX_AUTO_ROUNDS} 輪 - AI 互動中...`);
 
-    // Send to remote (discuss mode)
+    // Send to remote (A2A trace goes to top panel)
     const response = await sendToAgentAuto(`跟遠端 Agent 討論：${currentText}`);
 
     hideA2AThinking();
     setLoading(false);
 
-    if (!autoLoopActive) break; // user stopped
+    if (!autoLoopActive) break;
 
     if (response && response.trim()) {
-      // Bottom panel: only show Orchestrator's final summary (not raw remote responses)
-      addChatMsg('agent', response);
+      allResponses.push(response);
 
-      // Generate next question from Orchestrator (shown in top panel only)
+      // Generate next question (shown in top panel A2A trace only)
       if (autoLoopRounds < MAX_AUTO_ROUNDS) {
         const nextQ = await generateFollowUp(response);
         if (nextQ && autoLoopActive) {
-          // Follow-up shown in top panel A2A trace only, not bottom chat
           currentText = nextQ;
         } else {
           break;
         }
       }
     } else {
-      addChatSys('⚠️ 無法取得回應，自動對話結束');
       break;
     }
+  }
+
+  hideA2AThinking();
+
+  // ── Synthesize final result for client ──
+  if (allResponses.length > 0 && autoLoopActive) {
+    setLoading(true);
+    const summary = await synthesizeResult(text, allResponses);
+    setLoading(false);
+    if (summary) {
+      addChatMsg('agent', summary);
+    } else {
+      // Fallback: use last response
+      addChatMsg('agent', allResponses[allResponses.length - 1]);
+    }
+  } else if (allResponses.length > 0) {
+    addChatMsg('agent', allResponses[allResponses.length - 1]);
   }
 
   autoLoopActive = false;
   document.getElementById('btnAutoLoop').textContent = '🔄 自動對話';
   document.getElementById('btnAutoLoop').style.background = '#238636';
-  addChatSys(`✅ 自動對話結束 (${autoLoopRounds} 輪)`);
+}
+
+// Synthesize final answer from all rounds
+async function synthesizeResult(originalQuestion, responses) {
+  const roundsText = responses.map((r, i) => `### 第 ${i + 1} 輪回應\n${r.slice(0, 800)}`).join('\n\n');
+  try {
+    const res = await fetch(`${BASE}/a2a/jsonrpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'message/send',
+        params: { message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text: `原始使用者問題：「${originalQuestion}」\n\n你剛才透過 HelpDesk 進行了 ${responses.length} 輪 A2A 互動，以下是各輪的回應：\n\n${roundsText}\n\n請根據以上內容，用繁體中文整理一個完整、結構化的最終回答給使用者。不要提及 A2A 輪次或 HelpDesk，直接以專業客服的口吻回答。` }] } },
+        id: `synth-${Date.now()}`,
+      }),
+    });
+    const data = await res.json();
+    if (data.result) {
+      const task = data.result;
+      if (task.artifacts) {
+        for (const artifact of task.artifacts) {
+          for (const part of (artifact.parts || [])) {
+            if (part.kind === 'text' && !part.metadata?.role) return part.text;
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
 }
 
 async function sendToAgentAuto(text) {
