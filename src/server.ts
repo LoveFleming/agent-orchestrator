@@ -790,11 +790,36 @@ app.use('/a2a/jsonrpc', express.json(), jsonRpcHandler({ requestHandler, userBui
 app.use('/a2a/rest', restHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
 
 // ── Webhook endpoint — 接收 push notification ──
+// Also broadcasts to SSE clients so the UI updates in real-time
+const sseClients: Array<{ res: any }> = [];
+
 app.post('/a2a/webhook', express.json(), (req, res) => {
-  console.log('[A2A Webhook] Received push notification:', JSON.stringify(req.body).slice(0, 500));
+  const payload = req.body;
+  console.log('[A2A Webhook] Received push notification:', JSON.stringify(payload).slice(0, 500));
   // Store for UI to display
-  webhookEvents.push({ ...req.body, receivedAt: new Date().toISOString() });
+  webhookEvents.push({ ...payload, receivedAt: new Date().toISOString() });
+  // Broadcast to SSE clients
+  for (const client of sseClients) {
+    try {
+      client.res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {}
+  }
   res.json({ ok: true });
+});
+
+// ── SSE endpoint — frontend subscribes to get webhook results in real-time ──
+app.get('/api/sse', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+  const client = { res };
+  sseClients.push(client);
+  req.on('close', () => {
+    const idx = sseClients.indexOf(client);
+    if (idx >= 0) sseClients.splice(idx, 1);
+  });
 });
 
 // In-memory webhook events for UI

@@ -727,7 +727,7 @@ function showFlowModal(mode) {
         <div class="flow-step-num orch">1</div>
         <div class="flow-step-content orch">
           <div class="flow-step-title">使用者發送訊息 <span class="flow-step-tag orch">Orchestrator</span></div>
-          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「💭 討論」</div>
+          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「送出」或「🔄 自動對話」</div>
         </div>
       </div>
       <div class="flow-connector"></div>
@@ -743,9 +743,9 @@ function showFlowModal(mode) {
       <div class="flow-step">
         <div class="flow-step-num orch">3</div>
         <div class="flow-step-content orch">
-          <div class="flow-step-title">發送 message/send (含 webhook 設定) <span class="flow-step-tag orch">Orchestrator → PAAW</span></div>
-          <div class="flow-step-desc">透過 A2A SDK 送出請求，附帶 <code>pushNotification</code> 回呼 URL</div>
-          <div class="flow-step-code">client.sendMessage({ configuration: { pushNotification: { url, token }, blocking: false } })</div>
+          <div class="flow-step-title">發送 message/send (含 webhook 回呼 URL) <span class="flow-step-tag orch">Orchestrator → PAAW</span></div>
+          <div class="flow-step-desc">透過 A2A SDK 送出請求，附帶 <code>pushNotification</code> 回呼 URL：<br/><code style="color:#79c0ff;">http://localhost:4100/a2a/webhook</code></div>
+          <div class="flow-step-code">client.sendMessage({<br/>&nbsp;&nbsp;configuration: { pushNotification: {<br/>&nbsp;&nbsp;&nbsp;&nbsp;url: "http://localhost:4100/a2a/webhook",<br/>&nbsp;&nbsp;&nbsp;&nbsp;token: "orch-webhook"<br/>&nbsp;&nbsp;}, blocking: false }<br/>})</div>
         </div>
       </div>
       <div class="flow-connector"></div>
@@ -778,17 +778,26 @@ function showFlowModal(mode) {
       <div class="flow-step">
         <div class="flow-step-num paaw">6</div>
         <div class="flow-step-content paaw">
-          <div class="flow-step-title">PAAW 處理完成，回傳 <code>completed</code> <span class="flow-step-tag paaw">PAAW</span></div>
-          <div class="flow-step-desc">輪詢拿到最終結果，包含 artifacts（答案文字）</div>
+          <div class="flow-step-title">PAAW 處理完成 <span class="flow-step-tag paaw">PAAW</span></div>
+          <div class="flow-step-desc">Agent Loop 結束，task 狀態變為 <code>completed</code></div>
           <div class="flow-step-code">{ "status": { "state": "completed" }, "artifacts": [{ "parts": [{ "text": "答案" }] }] }</div>
         </div>
       </div>
       <div class="flow-connector"></div>
       <div class="flow-step">
-        <div class="flow-step-num orch">7</div>
+        <div class="flow-step-num webhook">7</div>
+        <div class="flow-step-content webhook">
+          <div class="flow-step-title">PAAW 回呼 Webhook URL <span class="flow-step-tag paaw">PAAW → Orchestrator</span></div>
+          <div class="flow-step-desc">PAAW POST 完成的 task 到 <code style="color:#79c0ff;">http://localhost:4100/a2a/webhook</code><br/>Orchestrator 透過 SSE 即時推播給前端 UI</div>
+          <div class="flow-step-code">fetch("http://localhost:4100/a2a/webhook", {<br/>&nbsp;&nbsp;method: "POST",<br/>&nbsp;&nbsp;body: JSON.stringify({ jsonrpc: "2.0", result: task })<br/>})</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">8</div>
         <div class="flow-step-content orch">
-          <div class="flow-step-title">Orchestrator 整合回覆使用者 <span class="flow-step-tag orch">Orchestrator</span></div>
-          <div class="flow-step-desc">把 HelpDesk 答案整合進回覆，顯示在對話框 + A2A 互動過程面板</div>
+          <div class="flow-step-title">Orchestrator 更新 UI <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">Polling 拿到結果 或 SSE 收到 webhook 推播，更新上下方面板</div>
         </div>
       </div>
 
@@ -807,7 +816,7 @@ function showFlowModal(mode) {
           <div class="flow-col">
             <h3>⚠️ 代價</h3>
             <ul>
-              <li>需要 polling（每 2s 一次）</li>
+              <li>Polling (每 2s) + SSE 雙重接收，SSE 即時推播</li>
               <li>回應延遲略高（首回 + 輪詢間隔）</li>
               <li>邏輯較複雜</li>
             </ul>
@@ -822,7 +831,7 @@ function showFlowModal(mode) {
         <div class="flow-step-num orch">1</div>
         <div class="flow-step-content orch">
           <div class="flow-step-title">使用者發送訊息 <span class="flow-step-tag orch">Orchestrator</span></div>
-          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「💭 討論」</div>
+          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「送出」或「🔄 自動對話」</div>
         </div>
       </div>
       <div class="flow-connector"></div>
@@ -1041,6 +1050,49 @@ _input.addEventListener('input', function() {
 // ── Init ──
 loadRemoteCard();
 setInterval(loadRemoteCard, 30000);
+
+// ── SSE: Subscribe to webhook push notifications ──
+let sseSource = null;
+function connectSSE() {
+  sseSource = new EventSource(BASE + '/api/sse');
+  sseSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      const task = payload.result;
+      if (!task) return;
+
+      // Parse the completed task
+      let responseText = '(無回應)';
+      if (task.artifacts?.[0]?.parts?.[0]?.text) {
+        responseText = task.artifacts[0].parts[0].text;
+      } else if (task.history) {
+        const lastAgent = [...task.history].reverse().find(m => m.role === 'agent');
+        if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
+      }
+
+      // Find the original question from history
+      const lastUser = [...task.history].reverse().find(m => m.role === 'user');
+      const question = lastUser?.parts?.[0]?.text || '(問題)';
+
+      // ── Update top panel: append A2A trace ──
+      addA2ASeparator(`📞 Webhook 回呼 — task ${task.id?.slice(0,8)}… ${task.status?.state}`);
+      addA2ARound(1, question, responseText, task.status?.state === 'input-required' ? 'input-required' : 'answered');
+
+      // ── Update bottom panel: show final result ──
+      addChatSys('📞 收到 Webhook 回呼結果：');
+      addChatMsg('agent', responseText);
+
+      hideA2AThinking();
+      setLoading(false);
+    } catch (e) { console.error('[SSE] parse error:', e); }
+  };
+  sseSource.onerror = () => {
+    console.log('[SSE] disconnected, reconnecting in 3s...');
+    sseSource?.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+connectSSE();
 // ── Auto Loop: two agents talking to each other ──
 let autoLoopActive = false;
 let autoLoopRounds = 0;
