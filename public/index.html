@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agent Orchestrator</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -62,6 +63,28 @@
   .trace-bubble.answer { background: #0d2818; border: 1px solid #238636; color: #7ee787; border-bottom-left-radius: 3px; }
   .trace-bubble.clarify { background: #2a1f0d; border: 1px solid #d29922; color: #e3b341; border-bottom-left-radius: 3px; text-align: left; }
   .trace-bubble.input-req { background: #2a1f0d; border: 1px solid #d29922; color: #e3b341; border-bottom-left-radius: 3px; }
+  /* ── Markdown content in bubbles ── */
+  .bubble, .trace-bubble { overflow-wrap: break-word; }
+  .bubble p, .trace-bubble p { margin: 0.3em 0; }
+  .bubble p:first-child, .trace-bubble p:first-child { margin-top: 0; }
+  .bubble p:last-child, .trace-bubble p:last-child { margin-bottom: 0; }
+  .bubble h1,.bubble h2,.bubble h3,.bubble h4,.bubble h5,.bubble h6,
+  .trace-bubble h1,.trace-bubble h2,.trace-bubble h3,.trace-bubble h4,.trace-bubble h5,.trace-bubble h6 {
+    font-size: 1em; font-weight: 600; margin: 0.5em 0 0.2em;
+  }
+  .bubble ul,.bubble ol,.trace-bubble ul,.trace-bubble ol { margin: 0.3em 0; padding-left: 1.4em; }
+  .bubble li,.trace-bubble li { margin: 0.15em 0; }
+  .bubble code,.trace-bubble code { background: #1c2028; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; font-family: 'SF Mono', Menlo, monospace; }
+  .bubble pre,.trace-bubble pre { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 8px 10px; margin: 0.4em 0; overflow-x: auto; font-size: 0.85em; line-height: 1.4; }
+  .bubble pre code,.trace-bubble pre code { background: none; padding: 0; font-size: 1em; }
+  .bubble table,.trace-bubble table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.9em; }
+  .bubble th,.bubble td,.trace-bubble th,.trace-bubble td { border: 1px solid #21262d; padding: 3px 8px; }
+  .bubble th,.trace-bubble th { background: #161b22; font-weight: 600; }
+  .bubble blockquote,.trace-bubble blockquote { border-left: 3px solid #30363d; padding-left: 10px; margin: 0.3em 0; color: #8b949e; }
+  .bubble hr,.trace-bubble hr { border: none; border-top: 1px solid #21262d; margin: 0.5em 0; }
+  .bubble img,.trace-bubble img { max-width: 100%; border-radius: 6px; }
+  .bubble a,.trace-bubble a { color: #58a6ff; text-decoration: none; }
+  .bubble a:hover,.trace-bubble a:hover { text-decoration: underline; }
   .trace-badge { font-size: 9px; padding: 1px 5px; border-radius: 4px; vertical-align: middle; }
   .badge-q { background: #1f6feb; color: #fff; }
   .badge-a { background: #238636; color: #fff; }
@@ -327,6 +350,7 @@
       <span class="pulse" id="a2aPulse"></span>
       <span class="count" id="a2aCount"></span>
       <span class="mode-label" id="modeLabel" style="font-size:10px;color:#8b949e;margin-left:8px;">⚡webhook</span>
+      <span style="cursor:pointer;font-size:11px;color:#8b949e;margin-left:4px;" onclick="clearA2A()" title="清除紀錄">🗑️</span>
     </div>
     <div class="panel-body" id="a2aArea">
       <div class="a2a-empty">尚無 A2A 互動紀錄</div>
@@ -363,6 +387,9 @@ let loading = false;
 let contextId = null;
 let chatCount = 0;
 let a2aCount = 0;
+
+// ── Helpers ──
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── DOM refs ──
 const a2aArea = document.getElementById('a2aArea');
@@ -406,7 +433,7 @@ function addChatMsg(role, text) {
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = text;
+  bubble.innerHTML = typeof marked !== 'undefined' ? marked.parse(text) : escapeHtml(text);
   wrap.appendChild(bubble);
 
   chatArea.appendChild(wrap);
@@ -427,8 +454,26 @@ function addChatSys(text) {
 }
 
 function clearA2A() {
-  a2aArea.innerHTML = '';
+  a2aArea.innerHTML = '<div class="a2a-empty">尚無 A2A 互動紀錄</div>';
   a2aCount = 0;
+  document.getElementById('a2aCount').textContent = '';
+}
+
+// ── Append a timestamped separator before new A2A interaction ──
+function addA2ASeparator(label) {
+  const sep = document.createElement('div');
+  sep.style.cssText = 'display:flex;align-items:center;gap:8px;margin:8px 0 4px;color:#8b949e;font-size:10px;';
+  const line1 = document.createElement('div');
+  line1.style.cssText = 'flex:1;height:1px;background:#21262d;';
+  const time = document.createElement('span');
+  time.textContent = label || new Date().toLocaleTimeString();
+  const line2 = document.createElement('div');
+  line2.style.cssText = 'flex:1;height:1px;background:#21262d;';
+  sep.appendChild(line1); sep.appendChild(time); sep.appendChild(line2);
+  a2aArea.appendChild(sep);
+  // Remove initial empty placeholder if still there
+  const empty = a2aArea.querySelector('.a2a-empty');
+  if (empty) empty.remove();
 }
 
 function showA2AThinking(label) {
@@ -471,7 +516,7 @@ function addA2ARound(round, question, response, status, clarify) {
 
   const qBubble = document.createElement('div');
   qBubble.className = 'trace-bubble question';
-  qBubble.textContent = question;
+  qBubble.innerHTML = typeof marked !== 'undefined' ? marked.parse(question) : escapeHtml(question);
   wrap.appendChild(qBubble);
 
   // Response bubble
@@ -485,7 +530,8 @@ function addA2ARound(round, question, response, status, clarify) {
     const aBubble = document.createElement('div');
     aBubble.className = 'trace-bubble input-req';
     aBubble.innerHTML = `<span class="trace-badge badge-input">❓ 補充</span> `;
-    aBubble.appendChild(document.createTextNode(response));
+    const respMd = typeof marked !== 'undefined' ? marked.parse(response) : escapeHtml(response);
+    aBubble.innerHTML += respMd;
     wrap.appendChild(aBubble);
 
     // Clarify (if any, left-aligned, orange)
@@ -497,16 +543,14 @@ function addA2ARound(round, question, response, status, clarify) {
 
       const cBubble = document.createElement('div');
       cBubble.className = 'trace-bubble clarify';
-      cBubble.innerHTML = `<span class="trace-badge badge-clarify">🤖 補充</span> `;
-      cBubble.appendChild(document.createTextNode(clarify));
+      cBubble.innerHTML = `<span class="trace-badge badge-clarify">🤖 補充</span> ` + (typeof marked !== 'undefined' ? marked.parse(clarify) : escapeHtml(clarify));
       wrap.appendChild(cBubble);
     }
   } else if (status === 'answered') {
     // Answer (green, left)
     const aBubble = document.createElement('div');
     aBubble.className = 'trace-bubble answer';
-    aBubble.innerHTML = `<span class="trace-badge badge-a">A</span> `;
-    aBubble.appendChild(document.createTextNode(response));
+    aBubble.innerHTML = `<span class="trace-badge badge-a">A</span> ` + (typeof marked !== 'undefined' ? marked.parse(response) : escapeHtml(response));
     wrap.appendChild(aBubble);
   } else {
     // Unknown/error
@@ -640,13 +684,13 @@ async function sendToAgent(text, isDiscuss) {
 
       // ── Populate A2A panel with trace ──
       if (hdTrace && hdTrace.rounds && hdTrace.rounds.length > 0) {
-        clearA2A();
+        addA2ASeparator();
         for (const r of hdTrace.rounds) {
           addA2ARound(r.round, r.question, r.response, r.status, r.clarify);
         }
       } else if (isDiscuss) {
         // No trace but was a discuss call — show single round
-        clearA2A();
+        addA2ASeparator();
         addA2ARound(1, text, responseText, 'answered');
       }
 
@@ -1156,10 +1200,10 @@ async function sendToAgentAuto(text) {
         }
       }
       if (hdTrace && hdTrace.rounds && hdTrace.rounds.length > 0) {
-        clearA2A();
+        addA2ASeparator();
         for (const r of hdTrace.rounds) { addA2ARound(r.round, r.question, r.response, r.status, r.clarify); }
       } else {
-        clearA2A();
+        addA2ASeparator();
         addA2ARound(autoLoopRounds, text.replace(/^跟遠端 Agent 討論：/, ''), responseText, 'answered');
       }
       return responseText;
@@ -1249,7 +1293,7 @@ async function sendOpenTicket() {
       }
 
       // Show A2A trace in top panel
-      clearA2A();
+      addA2ASeparator();
       if (hdTrace && hdTrace.rounds) {
         for (const r of hdTrace.rounds) { addA2ARound(r.round, r.question, r.response, r.status, r.clarify); }
       } else {
