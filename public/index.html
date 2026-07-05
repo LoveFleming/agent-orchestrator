@@ -239,8 +239,8 @@
   <!-- ▼ Bottom: Client Chat -->
   <div class="panel panel-bottom">
     <div class="panel-header">
-      <span class="icon">💬</span>
-      <span class="title">對話</span>
+      <span class="icon">💻</span>
+      <span class="title">客戶端</span>
       <span class="count" id="chatCount"></span>
     </div>
     <div class="panel-body" id="chatArea">
@@ -557,12 +557,8 @@ async function sendToAgent(text, isDiscuss) {
         if (el.textContent.includes('正在與遠端') || el.textContent.includes('討論中')) el.remove();
       });
 
-      // ── Add agent response to chat ──
-      if (isDiscuss) {
-        addChatMsg('remote', responseText);
-      } else {
-        addChatMsg('agent', responseText);
-      }
+      // ── Bottom panel: only show Orchestrator's final result ──
+      addChatMsg('agent', responseText);
     } else if (data.error) {
       hideA2AThinking();
       addChatSys(`❌ ${data.error.message}`);
@@ -935,14 +931,14 @@ async function toggleAutoLoop() {
     if (!autoLoopActive) break; // user stopped
 
     if (response && response.trim()) {
-      // Add remote response with remote tag
-      addChatMsg('remote', response);
+      // Bottom panel: only show Orchestrator's final summary (not raw remote responses)
+      addChatMsg('agent', response);
 
-      // Generate next question from Orchestrator
+      // Generate next question from Orchestrator (shown in top panel only)
       if (autoLoopRounds < MAX_AUTO_ROUNDS) {
         const nextQ = await generateFollowUp(response);
         if (nextQ && autoLoopActive) {
-          addChatMsg('agent', nextQ);
+          // Follow-up shown in top panel A2A trace only, not bottom chat
           currentText = nextQ;
         } else {
           break;
