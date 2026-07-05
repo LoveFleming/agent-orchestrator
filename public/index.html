@@ -89,6 +89,33 @@
   .btn-discuss { background: #1f6feb; color: #fff; }
   .btn-discuss:disabled { opacity: 0.4; }
 
+  /* ── Agent Card Modal ── */
+  .card-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .card-modal-overlay.show { display: flex; }
+  .card-modal { background: #0d1117; border: 1px solid #30363d; border-radius: 12px; width: 680px; max-width: 92vw; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .card-modal-header { padding: 12px 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .card-modal-header h2 { font-size: 14px; font-weight: 600; flex: 1; }
+  .card-modal-header .close-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 6px; }
+  .card-modal-header .close-btn:hover { background: #21262d; color: #e6edf3; }
+  .card-modal-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .card-section { border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+  .card-section-header { padding: 6px 12px; background: #161b22; font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+  .card-section-body { padding: 10px 12px; font-size: 12px; line-height: 1.7; color: #c9d1d9; }
+  .card-field { display: flex; gap: 8px; padding: 3px 0; }
+  .card-field-key { color: #8b949e; min-width: 100px; font-size: 11px; flex-shrink: 0; }
+  .card-field-val { color: #e6edf3; font-size: 12px; word-break: break-word; }
+  .card-skill-item { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .card-skill-item:last-child { margin-bottom: 0; }
+  .card-skill-name { font-size: 13px; font-weight: 600; color: #58a6ff; display: flex; align-items: center; gap: 6px; }
+  .card-skill-id { font-size: 10px; color: #8b949e; font-family: monospace; }
+  .card-skill-desc { font-size: 12px; color: #c9d1d9; margin-top: 4px; }
+  .card-skill-tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .card-skill-tags span { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: #21262d; color: #8b949e; }
+  .card-json-toggle { font-size: 10px; color: #1f6feb; cursor: pointer; margin-top: 6px; }
+  .card-json-toggle:hover { text-decoration: underline; }
+  .card-json-block { display: none; margin-top: 8px; background: #010409; border: 1px solid #21262d; border-radius: 6px; padding: 10px; font-size: 11px; font-family: 'SF Mono', monospace; color: #7ee787; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+  .card-json-block.show { display: block; }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
@@ -117,8 +144,23 @@
   <div class="skills" id="cardSkills"></div>
   <div class="state wait" id="cardState">等待</div>
   <div class="mode-toggle">
+    <button class="mode-btn" id="modeCard" onclick="showAgentCardModal()" style="background:#21262d;border-color:#388bfd;color:#58a6ff;">📋 Agent Card</button>
     <button class="mode-btn active" id="modeAsync" onclick="setMode('async')">⚡ Webhook</button>
     <button class="mode-btn" id="modeSync" onclick="setMode('sync')">🔒 Sync</button>
+  </div>
+</div>
+
+<!-- Agent Card Modal -->
+<div class="card-modal-overlay" id="cardModalOverlay" onclick="if(event.target===this)closeAgentCardModal()">
+  <div class="card-modal">
+    <div class="card-modal-header">
+      <h2>📋 Agent Card</h2>
+      <span style="font-size:10px;color:#8b949e;" id="cardModalUrl"></span>
+      <button class="close-btn" onclick="closeAgentCardModal()">✕</button>
+    </div>
+    <div class="card-modal-body" id="cardModalBody">
+      <div style="text-align:center;color:#8b949e;padding:40px;">載入中...</div>
+    </div>
   </div>
 </div>
 
@@ -453,6 +495,110 @@ async function sendToAgent(text, isDiscuss) {
     hideA2AThinking();
     addChatSys(`❌ 連線失敗: ${err.message}`);
   }
+}
+
+// ── Agent Card Modal ──
+let cachedAgentCard = null;
+
+async function showAgentCardModal() {
+  document.getElementById('cardModalOverlay').classList.add('show');
+  document.getElementById('cardModalBody').innerHTML = '<div style="text-align:center;color:#8b949e;padding:40px;">載入中...</div>';
+
+  try {
+    if (!cachedAgentCard) {
+      const res = await fetch(`${REMOTE}/.well-known/agent-card.json`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      cachedAgentCard = await res.json();
+    }
+    renderAgentCard(cachedAgentCard);
+  } catch (err) {
+    document.getElementById('cardModalBody').innerHTML = `<div style="text-align:center;color:#da3633;padding:40px;">❌ 無法載入 Agent Card: ${err.message}</div>`;
+  }
+}
+
+function closeAgentCardModal() {
+  document.getElementById('cardModalOverlay').classList.remove('show');
+}
+
+function renderAgentCard(card) {
+  const body = document.getElementById('cardModalBody');
+  const skills = card.skills || [];
+  const cardUrl = `${REMOTE}/.well-known/agent-card.json`;
+  document.getElementById('cardModalUrl').textContent = cardUrl;
+
+  let html = '';
+
+  // ── Basic Info ──
+  html += `<div class="card-section">
+    <div class="card-section-header">📦 基本資訊</div>
+    <div class="card-section-body">
+      <div class="card-field"><span class="card-field-key">Name</span><span class="card-field-val">${esc(card.name)}</span></div>
+      <div class="card-field"><span class="card-field-key">Description</span><span class="card-field-val">${esc(card.description)}</span></div>
+      <div class="card-field"><span class="card-field-key">Version</span><span class="card-field-val">${esc(card.version)}</span></div>
+      <div class="card-field"><span class="card-field-key">Protocol</span><span class="card-field-val">${esc(card.protocolVersion)}</span></div>
+      <div class="card-field"><span class="card-field-key">URL</span><span class="card-field-val">${esc(card.url)}</span></div>
+    </div>
+  </div>`;
+
+  // ── Capabilities ──
+  const caps = card.capabilities || {};
+  html += `<div class="card-section">
+    <div class="card-section-header">⚡ Capabilities</div>
+    <div class="card-section-body">
+      <div class="card-field"><span class="card-field-key">Streaming</span><span class="card-field-val">${caps.streaming ? '✅' : '❌'}</span></div>
+      <div class="card-field"><span class="card-field-key">Push Notifications</span><span class="card-field-val">${caps.pushNotifications ? '✅' : '❌'}</span></div>
+      <div class="card-field"><span class="card-field-key">State Transition</span><span class="card-field-val">${caps.stateTransition ? '✅' : '❌'}</span></div>
+    </div>
+  </div>`;
+
+  // ── Skills ──
+  html += `<div class="card-section">
+    <div class="card-section-header">🔧 Skills (${skills.length})</div>
+    <div class="card-section-body">`;
+
+  if (skills.length === 0) {
+    html += '<div style="color:#8b949e;">No skills registered.</div>';
+  } else {
+    skills.forEach((s, i) => {
+      const tags = (s.tags || []).map(t => `<span>${esc(t)}</span>`).join('');
+      const endpoints = s.endpoints
+        ? Object.entries(s.endpoints).map(([k,v]) => `<div class="card-field"><span class="card-field-key">${esc(k)}</span><span class="card-field-val" style="font-family:monospace;font-size:10px;">${esc(v)}</span></div>`).join('')
+        : '';
+      html += `<div class="card-skill-item">
+        <div class="card-skill-name">${esc(s.name || s.id)} <span class="card-skill-id">(${esc(s.id)})</span></div>
+        <div class="card-skill-desc">${esc(s.description || '')}</div>
+        ${tags ? `<div class="card-skill-tags">${tags}</div>` : ''}
+        ${endpoints ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #21262d;">${endpoints}</div>` : ''}
+        <div class="card-json-toggle" onclick="document.getElementById('skill-json-${i}').classList.toggle('show')">{ } View JSON</div>
+        <div class="card-json-block" id="skill-json-${i}">${esc(JSON.stringify(s, null, 2))}</div>
+      </div>`;
+    });
+  }
+  html += '</div></div>';
+
+  // ── Authentication ──
+  const auth = card.authentication || {};
+  html += `<div class="card-section">
+    <div class="card-section-header">🔒 Authentication</div>
+    <div class="card-section-body">
+      <div class="card-field"><span class="card-field-key">Schemes</span><span class="card-field-val">${esc((auth.schemes || []).join(', ') || 'none')}</span></div>
+    </div>
+  </div>`;
+
+  // ── Full JSON ──
+  html += `<div class="card-section">
+    <div class="card-section-header" style="cursor:pointer;" onclick="document.getElementById('full-json').classList.toggle('show')">
+      📄 Full JSON <span style="margin-left:auto;font-size:10px;color:#1f6feb;">click to expand</span>
+    </div>
+    <div class="card-json-block" id="full-json" style="display:none;">${esc(JSON.stringify(card, null, 2))}</div>
+  </div>`;
+
+  body.innerHTML = html;
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Keyboard (with IME protection) ──
