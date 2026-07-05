@@ -256,6 +256,7 @@
   <button class="btn-send" id="btnSend" onclick="sendChat()">送出</button>
   <button class="btn-discuss" id="btnDiscuss" onclick="sendDiscuss()">💭 討論</button>
   <button class="btn-discuss" id="btnAutoLoop" onclick="toggleAutoLoop()" style="background:#238636;border-color:#238636;">🔄 自動對話</button>
+  <button class="btn-discuss" id="btnTicket" onclick="sendOpenTicket()" style="background:#1f6feb;border-color:#1f6feb;">🎫 開 Ticket</button>
 </div>
 
 <script>
@@ -1065,6 +1066,89 @@ async function generateFollowUp(remoteResponse) {
     }
   } catch {}
   return null;
+}
+
+// ── Open Ticket via A2A ──
+async function sendOpenTicket() {
+  const input = document.getElementById('input');
+  const text = input.value.trim() || '請介紹 PAAW 的 Skill Builder 功能';
+  input.value = '';
+  input.style.height = 'auto';
+
+  // Show user question in client panel
+  addChatMsg('user', text);
+  addChatSys('🎫 透過 A2A 開 Ticket 中...');
+  setLoading(true);
+  showA2AThinking('正在透過 A2A 開 Ticket...');
+
+  try {
+    // Send via A2A JSON-RPC
+    const res = await fetch(`${BASE}/a2a/jsonrpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'message/send',
+        params: {
+          message: {
+            kind: 'message', role: 'user',
+            messageId: `msg-${Date.now()}`,
+            parts: [{ kind: 'text', text }],
+            ...(contextId ? { contextId } : {}),
+          },
+        },
+        id: `ticket-${Date.now()}`,
+      }),
+    });
+    const data = await res.json();
+
+    hideA2AThinking();
+
+    if (data.result) {
+      const task = data.result;
+      contextId = contextId || task.contextId;
+
+      // Parse response
+      let responseText = '(無回應)';
+      let hdTrace = null;
+      if (task.artifacts) {
+        for (const artifact of task.artifacts) {
+          for (const part of (artifact.parts || [])) {
+            if (part.metadata?.role === 'hd-trace') { try { hdTrace = JSON.parse(part.text); } catch {} }
+            else if (part.kind === 'text' && !part.metadata?.role) { responseText = part.text; }
+          }
+        }
+      }
+
+      // Show A2A trace in top panel
+      clearA2A();
+      if (hdTrace && hdTrace.rounds) {
+        for (const r of hdTrace.rounds) { addA2ARound(r.round, r.question, r.response, r.status, r.clarify); }
+      } else {
+        addA2ARound(1, text, responseText, task.status?.state === 'input-required' ? 'input-required' : 'answered');
+      }
+
+      // Remove "thinking" sys messages
+      chatArea.querySelectorAll('.chat-sys').forEach(el => {
+        if (el.textContent.includes('開 Ticket')) el.remove();
+      });
+
+      // Show result in client panel
+      addChatMsg('agent', responseText);
+      addChatSys(`🎫 Ticket 已建立 — 同時出現在 PAAW HelpDesk → 🎫 Tickets tab`);
+    } else {
+      chatArea.querySelectorAll('.chat-sys').forEach(el => {
+        if (el.textContent.includes('開 Ticket')) el.remove();
+      });
+      addChatSys('❌ 開 Ticket 失敗');
+    }
+  } catch (err) {
+    hideA2AThinking();
+    chatArea.querySelectorAll('.chat-sys').forEach(el => {
+      if (el.textContent.includes('開 Ticket')) el.remove();
+    });
+    addChatSys(`❌ 連線失敗: ${err.message}`);
+  }
+  setLoading(false);
 }
 
 </script>
