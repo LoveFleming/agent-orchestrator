@@ -276,7 +276,7 @@ async function getPaawClient() {
  * immediately, then we poll tasks/get until completed/input-required/failed.
  * Falls back to sync mode if PAAW doesn't support webhooks.
  */
-async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: string) => void): Promise<{ task: any; contextId: string }> {
+async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: string) => void, taskId?: string): Promise<{ task: any; contextId: string }> {
   const client = await getPaawClient();
   const cid = contextId || `ctx-${Date.now()}`;
 
@@ -302,12 +302,23 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
   } as any;
 
   console.log(`[A2A-SDK] mode=${remoteCallMode} sending: "${text.slice(0, 60)}"`);
+
+  // Persist: A2A send event
+  if (taskId) {
+    await taskStore.appendEvent(taskId, { type: 'a2a_send', name: 'message/send', text: text.slice(0, 200) });
+  }
+
   const response = await client.sendMessage(sendParams);
   const task = response as any;
   const taskState = task?.status?.state;
 
   console.log(`[A2A-SDK] Initial response: state=${taskState} taskId=${task?.id}`);
   if (onStatus) onStatus(taskState);
+
+  // Persist: A2A response event
+  if (taskId) {
+    await taskStore.appendEvent(taskId, { type: 'a2a_response', name: `task:${taskState}`, remoteTaskId: task?.id });
+  }
 
   // ── ASYNC: If working, poll tasks/get until terminal state ──
   if (asyncMode && taskState === 'working' && task?.id) {
@@ -436,7 +447,19 @@ async function sendToRemoteAgent(text: string, contextId?: string): Promise<{ re
 }
 
 // ════════════════════════════════════════════════════════
-// 4. Agent Executor — 真的 Agent Loop
+// 4. Task Persistence (JSON file-based) — declared early for AgentExecutor
+// ════════════════════════════════════════════════════════
+
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const TASKS_DIR = resolve(__dirname, '../data/a2a-tasks');
+const taskStore = new JsonFileTaskStore(TASKS_DIR);
+
+// ════════════════════════════════════════════════════════
+// 5. Agent Executor — 真的 Agent Loop
 // ════════════════════════════════════════════════════════
 
 class RealAgentExecutor implements AgentExecutor {
@@ -472,11 +495,31 @@ class RealAgentExecutor implements AgentExecutor {
 
     console.log(`[A2A] Task ${taskId}: "${userText.slice(0, 100)}"`);
 
+    // ── Phase 1: Load task context from persistence ──
+    let memoryContext = '';
+    try {
+      const existingTask = await taskStore.load(taskId) as any;
+      if (existingTask?.memory?.length) {
+        memoryContext = '\n\n## Previous Memory\n' + existingTask.memory
+          .map((m: any) => `- [${m.type}] ${m.content}`)
+          .join('\n');
+      }
+      if (existingTask?.events?.length) {
+        const recentEvents = existingTask.events.slice(-10);
+        memoryContext += '\n\n## Recent Events\n' + recentEvents
+          .map((e: any) => `- ${e.type}: ${e.name || JSON.stringify(e).slice(0, 80)}`)
+          .join('\n');
+      }
+    } catch { /* task not yet saved */ }
+
+    // Persist: task started
+    await taskStore.appendEvent(taskId, { type: 'task_start', name: 'agent_loop', text: userText.slice(0, 200) });
+
     try {
       // Build messages for LLM
       const channel = chatChannels.get(contextId || '');
       const messages: Array<{ role: string; content: string }> = [
-        { role: 'system', content: buildSystemPrompt() },
+        { role: 'system', content: buildSystemPrompt() + memoryContext },
       ];
 
       // Add conversation history from channel if exists
@@ -503,6 +546,10 @@ class RealAgentExecutor implements AgentExecutor {
       // Check if LLM wants to call remote
       const remoteMatch = llmResponse.match(/\[REMOTE:\s*([\s\S]+?)\]/);
       const hdTrace: Array<{ round: number; question: string; response: string; status: string; clarify?: string }> = [];
+
+      // Persist: LLM decision
+      await taskStore.appendEvent(taskId, { type: 'llm_decision', name: remoteMatch ? 'remote_call' : 'local_answer' });
+
       if (remoteMatch) {
         const remoteQuestion = remoteMatch[1].trim();
         console.log(`[A2A] LLM requests remote: "${remoteQuestion.slice(0, 80)}"`);
@@ -527,7 +574,7 @@ class RealAgentExecutor implements AgentExecutor {
             hdRound++;
 
             // ── Use SDK Client to send message ──
-            const sdkResult = await sendViaA2ASDK(hdMessage, a2aContextId);
+            const sdkResult = await sendViaA2ASDK(hdMessage, a2aContextId, undefined, taskId);
             const hdTask = sdkResult.task;
             a2aContextId = sdkResult.contextId;
 
@@ -659,6 +706,10 @@ class RealAgentExecutor implements AgentExecutor {
 
       console.log(`[A2A] Task ${taskId}: completed`);
 
+      // Persist: task completed with token estimate
+      await taskStore.appendEvent(taskId, { type: 'task_complete', name: 'agent_loop', rounds: hdTrace.length });
+      await taskStore.saveTokens(taskId, { prompt: 0, completion: 0, total: result.length }).catch(() => {});
+
     } catch (err: any) {
       eventBus.publish({
         kind: 'status-update',
@@ -679,6 +730,7 @@ class RealAgentExecutor implements AgentExecutor {
         final: true,
       } as TaskStatusUpdateEvent);
       console.error(`[A2A] Task ${taskId}: failed — ${err.message}`);
+      await taskStore.appendEvent(taskId, { type: 'task_failed', name: 'agent_loop', error: err.message.slice(0, 200) });
     }
 
     eventBus.finished();
@@ -704,15 +756,8 @@ const pushNotificationSender = new DefaultPushNotificationSender(pushNotificatio
 // ════════════════════════════════════════════════════════
 
 const agentExecutor = new RealAgentExecutor();
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
-// ── Task Persistence: JSON file-based ──
-const TASKS_DIR = resolve(__dirname, '../data/a2a-tasks');
-// Persist tasks to JSON files instead of in-memory
-const taskStore = new JsonFileTaskStore(TASKS_DIR);
+// taskStore already declared above (before AgentExecutor)
 
 const requestHandler = new DefaultRequestHandler(
   AGENT_CARD,
