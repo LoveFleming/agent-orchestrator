@@ -1248,25 +1248,28 @@ async function sendOpenTicket() {
   input.value = '';
   input.style.height = 'auto';
 
-  // Show user question in client panel
   addChatMsg('user', text);
   addChatSys('🎫 透過 A2A 開 Ticket 中...');
   setLoading(true);
-  showA2AThinking('正在透過 A2A 開 Ticket...');
+  showA2AThinking('正在直接向 PAAW HelpDesk 發送 A2A 請求...');
+
+  const PAAW_A2A = REMOTE + '/a2a';
+  const msgId = `msg-ticket-${Date.now()}`;
+  const ctxId = `ticket-ctx-${Date.now()}`;
 
   try {
-    // Send via A2A JSON-RPC
-    const res = await fetch(`${BASE}/a2a/jsonrpc`, {
+    // ── 直接發到 PAAW 的 A2A endpoint（不經過 Orchestrator Agent Loop）──
+    const res = await fetch(PAAW_A2A, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'message/send',
         params: {
           message: {
-            kind: 'message', role: 'user',
-            messageId: `msg-${Date.now()}`,
-            parts: [{ kind: 'text', text }],
-            ...(contextId ? { contextId } : {}),
+            role: 'user',
+            parts: [{ type: 'text', text }],
+            messageId: msgId,
+            contextId: ctxId,
           },
         },
         id: `ticket-${Date.now()}`,
@@ -1278,41 +1281,26 @@ async function sendOpenTicket() {
 
     if (data.result) {
       const task = data.result;
-      contextId = contextId || task.contextId;
-
-      // Parse response
       let responseText = '(無回應)';
-      let hdTrace = null;
-      if (task.artifacts) {
-        for (const artifact of task.artifacts) {
-          for (const part of (artifact.parts || [])) {
-            if (part.metadata?.role === 'hd-trace') { try { hdTrace = JSON.parse(part.text); } catch {} }
-            else if (part.kind === 'text' && !part.metadata?.role) { responseText = part.text; }
-          }
-        }
+      if (task.artifacts?.[0]?.parts?.[0]?.text) {
+        responseText = task.artifacts[0].parts[0].text;
+      } else if (task.history) {
+        const lastAgent = [...task.history].reverse().find(m => m.role === 'agent');
+        if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
       }
 
       // Show A2A trace in top panel
       addA2ASeparator();
-      if (hdTrace && hdTrace.rounds) {
-        for (const r of hdTrace.rounds) { addA2ARound(r.round, r.question, r.response, r.status, r.clarify); }
-      } else {
-        addA2ARound(1, text, responseText, task.status?.state === 'input-required' ? 'input-required' : 'answered');
-      }
-
-      // Remove "thinking" sys messages
-      chatArea.querySelectorAll('.chat-sys').forEach(el => {
-        if (el.textContent.includes('開 Ticket')) el.remove();
-      });
+      addA2ARound(1, text, responseText, task.status?.state === 'completed' ? 'answered' : 'input-required');
 
       // Show result in client panel
       addChatMsg('agent', responseText);
-      addChatSys(`🎫 Ticket 已建立 — 同時出現在 PAAW HelpDesk → 🎫 Tickets tab`);
-    } else {
+      addChatSys('🎫 Ticket 已建立 — 同時出現在 PAAW HelpDesk → 🎫 Tickets tab');
+    } else if (data.error) {
       chatArea.querySelectorAll('.chat-sys').forEach(el => {
         if (el.textContent.includes('開 Ticket')) el.remove();
       });
-      addChatSys('❌ 開 Ticket 失敗');
+      addChatSys(`❌ 開 Ticket 失敗: ${data.error.message || JSON.stringify(data.error)}`);
     }
   } catch (err) {
     hideA2AThinking();
