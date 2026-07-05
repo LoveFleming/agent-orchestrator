@@ -870,7 +870,7 @@ app.get('/', (_req, res) => {
 });
 
 // Start
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`\n🚀 Agent Orchestrator 已啟動`);
   console.log(`   UI         : http://localhost:${PORT}`);
   console.log(`   Agent Card : http://localhost:${PORT}/${AGENT_CARD_PATH}`);
@@ -889,3 +889,20 @@ app.listen(PORT, () => {
   // Discover remote agent skills on startup
   discoverRemoteAgent();
 });
+
+// ── Graceful shutdown (fixes "Process didn't exit in 5s. Force killing...") ──
+function shutdown(signal: string) {
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+  httpServer.close(() => {
+    console.log('[Shutdown] HTTP server closed.');
+    process.exit(0);
+  });
+  // Force exit after 3s if something hangs
+  setTimeout(() => {
+    console.log('[Shutdown] Forcing exit after 3s timeout.');
+    process.exit(1);
+  }, 3000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
