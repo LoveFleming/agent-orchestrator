@@ -836,7 +836,7 @@ function renderAgentCard(card) {
     <div class="card-section-header" style="cursor:pointer;" onclick="document.getElementById('full-json').classList.toggle('show')">
       📄 Full JSON <span style="margin-left:auto;font-size:10px;color:#1f6feb;">click to expand</span>
     </div>
-    <div class="card-json-block" id="full-json" style="display:none;">${esc(JSON.stringify(card, null, 2))}</div>
+    <div class="card-json-block" id="full-json">${esc(JSON.stringify(card, null, 2))}</div>
   </div>`;
 
   body.innerHTML = html;
