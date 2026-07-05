@@ -189,6 +189,7 @@
     <button class="mode-btn" id="modeCard" onclick="showAgentCardModal()" style="background:#21262d;border-color:#388bfd;color:#58a6ff;">📋 Agent Card</button>
     <button class="mode-btn" id="modeFlowAsync" onclick="showFlowModal('async')" style="background:#21262d;border-color:#8957e5;color:#bc8cff;">🔗 Webhook 流程</button>
     <button class="mode-btn" id="modeFlowSync" onclick="showFlowModal('sync')" style="background:#21262d;border-color:#d29922;color:#e3b341;">🔗 Sync 流程</button>
+    <button class="mode-btn" id="modeSpec" onclick="showSpecModal()" style="background:#21262d;border-color:#3fb950;color:#3fb950;">📖 A2A Spec</button>
     <button class="mode-btn active" id="modeAsync" onclick="setMode('async')">⚡ Webhook</button>
     <button class="mode-btn" id="modeSync" onclick="setMode('sync')">🔒 Sync</button>
   </div>
@@ -210,6 +211,98 @@
 
 <!-- Flow Diagram Modal -->
 <div class="flow-modal-overlay" id="flowModalOverlay" onclick="if(event.target===this)closeFlowModal()">
+
+<div class="flow-modal-overlay" id="specModalOverlay" style="display:none;" onclick="if(event.target===this)closeSpecModal()">
+  <div class="flow-modal-content" style="max-width:700px;max-height:85vh;">
+    <div class="flow-modal-header">
+      <h2>📖 A2A Protocol 重點摘要</h2>
+      <button class="close-btn" onclick="closeSpecModal()">✕</button>
+    </div>
+    <div class="flow-modal-body" style="padding:24px;line-height:1.8;">
+      <div style="margin-bottom:20px;">
+        <h3 style="color:#58a6ff;font-size:15px;margin-bottom:8px;">🎯 什麼是 A2A？</h3>
+        <p style="color:#c9d1d9;font-size:13px;"><strong>Agent2Agent Protocol</strong> 是 Google 主導的開放標準，讓不同框架、不同廠商的 AI Agent 能夠互相發現、溝通、協作。不論你用 LangChain、CrewAI、OpenAI Agents 還是自建系統，A2A 提供統一的語言。</p>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <h3 style="color:#3fb950;font-size:15px;margin-bottom:8px;">🔑 核心概念</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Agent Card</strong><br/><span style="color:#8b949e;">JSON 元資料，宣告 Agent 的身份、技能、端點、認證方式</span></div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Task</strong><br/><span style="color:#8b949e;">最小工作單元，有狀態生命週期 (submitted→working→completed)</span></div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Message</strong><br/><span style="color:#8b949e;">一輪對話，含 role (user/agent) 和多個 Part</span></div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Part</strong><br/><span style="color:#8b949e;">內容最小單元：文字、檔案、結構化資料</span></div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Artifact</strong><br/><span style="color:#8b949e;">Agent 產出物（文件、圖片、資料），由 Part 組成</span></div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;"><strong style="color:#bc8cff;">Context</strong><br/><span style="color:#8b949e;">邏輯分組，把相關的 Task 和 Message 串在一起</span></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <h3 style="color:#d29922;font-size:15px;margin-bottom:8px;">⚙️ 六大操作</h3>
+        <table style="width:100%;font-size:12px;color:#c9d1d9;border-collapse:collapse;">
+          <tr style="border-bottom:1px solid #30363d;"><td style="padding:6px;font-family:monospace;color:#79c0ff;">message/send</td><td style="padding:6px;">發送訊息，同步取回結果</td></tr>
+          <tr style="border-bottom:1px solid #30363d;"><td style="padding:6px;font-family:monospace;color:#79c0ff;">message/stream</td><td style="padding:6px;">發送訊息，SSE 串流即時更新</td></tr>
+          <tr style="border-bottom:1px solid #30363d;"><td style="padding:6px;font-family:monospace;color:#79c0ff;">tasks/get</td><td style="padding:6px;">查詢 Task 狀態與 Artifacts</td></tr>
+          <tr style="border-bottom:1px solid #30363d;"><td style="padding:6px;font-family:monospace;color:#79c0ff;">tasks/list</td><td style="padding:6px;">列出所有 Tasks</td></tr>
+          <tr style="border-bottom:1px solid #30363d;"><td style="padding:6px;font-family:monospace;color:#79c0ff;">tasks/cancel</td><td style="padding:6px;">取消進行中的 Task</td></tr>
+          <tr><td style="padding:6px;font-family:monospace;color:#79c0ff;">GET /.well-known/agent.json</td><td style="padding:6px;">取得 Agent Card（發現機制）</td></tr>
+        </table>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <h3 style="color:#f85149;font-size:15px;margin-bottom:8px;">🔄 Task 狀態生命週期</h3>
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;font-family:monospace;">
+          <span style="background:#21262d;padding:4px 8px;border-radius:6px;color:#8b949e;">submitted</span>
+          <span style="color:#484f58;">→</span>
+          <span style="background:#0d2818;padding:4px 8px;border-radius:6px;color:#3fb950;">working</span>
+          <span style="color:#484f58;">→</span>
+          <span style="background:#0c2d6b;padding:4px 8px;border-radius:6px;color:#58a6ff;">input-required</span>
+          <span style="color:#484f58;">→</span>
+          <span style="background:#0d2818;padding:4px 8px;border-radius:6px;color:#3fb950;">completed</span>
+          <span style="color:#484f58;">|</span>
+          <span style="background:#2d1b1b;padding:4px 8px;border-radius:6px;color:#f85149;">failed</span>
+          <span style="color:#484f58;">|</span>
+          <span style="background:#21262d;padding:4px 8px;border-radius:6px;color:#8b949e;">canceled</span>
+        </div>
+        <p style="color:#8b949e;font-size:11px;margin-top:6px;">input-required = 需要使用者補充資訊（Human-in-the-loop）</p>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <h3 style="color:#bc8cff;font-size:15px;margin-bottom:8px;">📡 通訊模式</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;background:#161b22;padding:10px 14px;border-radius:8px;border:1px solid #30363d;">
+            <div style="color:#3fb950;font-weight:600;font-size:13px;">⚡ Sync</div>
+            <div style="color:#8b949e;font-size:11px;margin-top:4px;">HTTP POST，等 HelpDesk 處理完回傳。<br/>適合短問答、即時查詢。</div>
+          </div>
+          <div style="flex:1;min-width:180px;background:#161b22;padding:10px 14px;border-radius:8px;border:1px solid #30363d;">
+            <div style="color:#d29922;font-weight:600;font-size:13px;">🌊 Stream</div>
+            <div style="color:#8b949e;font-size:11px;margin-top:4px;">SSE 串流，即時看到處理進度。<br/>適合長任務、生成內容。</div>
+          </div>
+          <div style="flex:1;min-width:180px;background:#161b22;padding:10px 14px;border-radius:8px;border:1px solid #30363d;">
+            <div style="color:#bc8cff;font-weight:600;font-size:13px;">🔔 Webhook</div>
+            <div style="color:#8b949e;font-size:11px;margin-top:4px;">非同步 push notification。<br/>適合超長任務、斷線續傳。</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:8px;">
+        <h3 style="color:#58a6ff;font-size:15px;margin-bottom:8px;">🏗️ 三層架構</h3>
+        <div style="font-size:12px;color:#c9d1d9;">
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;margin-bottom:4px;">📐 <strong>Data Model</strong> — Task, Message, AgentCard, Part, Artifact（協議無關的資料定義）</div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;margin-bottom:4px;">⚙️ <strong>Operations</strong> — Send, Stream, Get, List, Cancel（抽象操作）</div>
+          <div style="background:#161b22;padding:8px 12px;border-radius:8px;border:1px solid #30363d;">🔌 <strong>Bindings</strong> — JSON-RPC 2.0, gRPC, HTTP/REST（具體協定綁定）</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #30363d;">
+        <a href="https://a2a-protocol.org/latest/specification/" target="_blank" style="color:#58a6ff;font-size:12px;text-decoration:none;">📄 完整 Spec → a2a-protocol.org</a>
+        <span style="color:#484f58;margin:0 8px;">·</span>
+        <a href="https://github.com/a2aproject/A2A" target="_blank" style="color:#58a6ff;font-size:12px;text-decoration:none;">GitHub → a2aproject/A2A</a>
+        <span style="color:#484f58;margin:0 8px;">·</span>
+        <span style="color:#8b949e;font-size:12px;">v1.0.0</span>
+      </div>
+    </div>
+  </div>
+</div>
   <div class="flow-modal">
     <div class="flow-modal-header">
       <h2 id="flowModalTitle">🔗 A2A 互動流程</h2>
@@ -788,6 +881,13 @@ function showFlowModal(mode) {
 
 function closeFlowModal() {
   document.getElementById('flowModalOverlay').classList.remove('show');
+}
+
+function showSpecModal() {
+  document.getElementById('specModalOverlay').style.display = 'flex';
+}
+function closeSpecModal() {
+  document.getElementById('specModalOverlay').style.display = 'none';
 }
 
 function renderAgentCard(card) {
