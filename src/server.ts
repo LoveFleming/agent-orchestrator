@@ -23,6 +23,7 @@ import {
   InMemoryPushNotificationStore,
   DefaultPushNotificationSender,
 } from '@a2a-js/sdk/server';
+import { JsonFileTaskStore } from './json-file-task-store.js';
 import {
   agentCardHandler,
   jsonRpcHandler,
@@ -703,7 +704,15 @@ const pushNotificationSender = new DefaultPushNotificationSender(pushNotificatio
 // ════════════════════════════════════════════════════════
 
 const agentExecutor = new RealAgentExecutor();
-const taskStore = new InMemoryTaskStore();
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// ── Task Persistence: JSON file-based ──
+const TASKS_DIR = resolve(__dirname, '../data/a2a-tasks');
+// Persist tasks to JSON files instead of in-memory
+const taskStore = new JsonFileTaskStore(TASKS_DIR);
 
 const requestHandler = new DefaultRequestHandler(
   AGENT_CARD,
