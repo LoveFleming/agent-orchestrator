@@ -1075,15 +1075,24 @@ function connectSSE() {
       const question = lastUser?.parts?.[0]?.text || '(問題)';
 
       // ── Update top panel: append A2A trace ──
-      addA2ASeparator(`📞 Webhook 回呼 — task ${task.id?.slice(0,8)}… ${task.status?.state}`);
-      addA2ARound(1, question, responseText, task.status?.state === 'input-required' ? 'input-required' : 'answered');
+      const stateLabel = task.status?.message
+        ? `📞 Webhook — ${task.status.state} (${task.status.message})`
+        : `📞 Webhook — task ${task.id?.slice(0,8)}… ${task.status?.state}`;
+      addA2ASeparator(stateLabel);
 
-      // ── Update bottom panel: show final result ──
-      addChatSys('📞 收到 Webhook 回呼結果：');
-      addChatMsg('agent', responseText);
+      // Only show final answer in chat panel (skip intermediate 'working' updates)
+      if (task.status?.state !== 'working') {
+        addChatSys(`📞 收到 Webhook 回呼：${task.status?.state}${task.status?.message ? ' — ' + task.status.message : ''}`);
+        addChatMsg('agent', responseText);
+      } else {
+        // Intermediate status — just show in top panel trace
+        addA2ARound(1, question, `⏳ ${task.status?.message || 'processing...'}`, 'answered');
+      }
 
-      hideA2AThinking();
-      setLoading(false);
+      if (task.status?.state !== 'working') {
+        hideA2AThinking();
+        setLoading(false);
+      }
     } catch (e) { console.error('[SSE] parse error:', e); }
   };
   sseSource.onerror = () => {
