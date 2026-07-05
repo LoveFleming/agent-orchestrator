@@ -211,9 +211,18 @@
 
 <!-- Flow Diagram Modal -->
 <div class="flow-modal-overlay" id="flowModalOverlay" onclick="if(event.target===this)closeFlowModal()">
+  <div class="flow-modal">
+    <div class="flow-modal-header">
+      <h2 id="flowModalTitle">🔗 A2A 互動流程</h2>
+      <button class="close-btn" onclick="closeFlowModal()">✕</button>
+    </div>
+    <div class="flow-modal-body" id="flowModalBody"></div>
+  </div>
+</div>
 
+<!-- A2A Spec Modal -->
 <div class="flow-modal-overlay" id="specModalOverlay" style="display:none;" onclick="if(event.target===this)closeSpecModal()">
-  <div class="flow-modal-content" style="max-width:700px;max-height:85vh;">
+  <div class="flow-modal" style="max-width:700px;max-height:85vh;">
     <div class="flow-modal-header">
       <h2>📖 A2A Protocol 重點摘要</h2>
       <button class="close-btn" onclick="closeSpecModal()">✕</button>
@@ -301,14 +310,6 @@
         <span style="color:#8b949e;font-size:12px;">v1.0.0</span>
       </div>
     </div>
-  </div>
-</div>
-  <div class="flow-modal">
-    <div class="flow-modal-header">
-      <h2 id="flowModalTitle">🔗 A2A 互動流程</h2>
-      <button class="close-btn" onclick="closeFlowModal()">✕</button>
-    </div>
-    <div class="flow-modal-body" id="flowModalBody"></div>
   </div>
 </div>
 
@@ -884,10 +885,10 @@ function closeFlowModal() {
 }
 
 function showSpecModal() {
-  document.getElementById('specModalOverlay').style.display = 'flex';
+  document.getElementById('specModalOverlay').classList.add('show');
 }
 function closeSpecModal() {
-  document.getElementById('specModalOverlay').style.display = 'none';
+  document.getElementById('specModalOverlay').classList.remove('show');
 }
 
 function renderAgentCard(card) {
