@@ -303,11 +303,6 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
 
   console.log(`[A2A-SDK] mode=${remoteCallMode} sending: "${text.slice(0, 60)}"`);
 
-  // Persist: A2A send event
-  if (taskId) {
-    await taskStore.appendEvent(taskId, { type: 'a2a_send', name: 'message/send', text: text.slice(0, 200) });
-  }
-
   const response = await client.sendMessage(sendParams);
   const task = response as any;
   const taskState = task?.status?.state;
@@ -315,9 +310,12 @@ async function sendViaA2ASDK(text: string, contextId?: string, onStatus?: (s: st
   console.log(`[A2A-SDK] Initial response: state=${taskState} taskId=${task?.id}`);
   if (onStatus) onStatus(taskState);
 
-  // Persist: A2A response event
+  // Persist: A2A response event (after SDK has saved the task)
   if (taskId) {
-    await taskStore.appendEvent(taskId, { type: 'a2a_response', name: `task:${taskState}`, remoteTaskId: task?.id });
+    setTimeout(() => {
+      taskStore.appendEvent(taskId, { type: 'a2a_send', name: 'message/send', text: text.slice(0, 200) }).catch(() => {});
+      taskStore.appendEvent(taskId, { type: 'a2a_response', name: `task:${taskState}`, remoteTaskId: task?.id }).catch(() => {});
+    }, 500);
   }
 
   // ── ASYNC: If working, poll tasks/get until terminal state ──
@@ -513,7 +511,8 @@ class RealAgentExecutor implements AgentExecutor {
     } catch { /* task not yet saved */ }
 
     // Persist: task started
-    await taskStore.appendEvent(taskId, { type: 'task_start', name: 'agent_loop', text: userText.slice(0, 200) });
+    // (events will be flushed after SDK saves the task, to avoid overwrite)
+    const _pendingEvents: any[] = [{ type: 'task_start', name: 'agent_loop', text: userText.slice(0, 200) }];
 
     try {
       // Build messages for LLM
@@ -548,7 +547,7 @@ class RealAgentExecutor implements AgentExecutor {
       const hdTrace: Array<{ round: number; question: string; response: string; status: string; clarify?: string }> = [];
 
       // Persist: LLM decision
-      await taskStore.appendEvent(taskId, { type: 'llm_decision', name: remoteMatch ? 'remote_call' : 'local_answer' });
+      _pendingEvents.push({ type: 'llm_decision', name: remoteMatch ? 'remote_call' : 'local_answer' });
 
       if (remoteMatch) {
         const remoteQuestion = remoteMatch[1].trim();
@@ -706,9 +705,13 @@ class RealAgentExecutor implements AgentExecutor {
 
       console.log(`[A2A] Task ${taskId}: completed`);
 
-      // Persist: task completed with token estimate
-      await taskStore.appendEvent(taskId, { type: 'task_complete', name: 'agent_loop', rounds: hdTrace.length });
-      await taskStore.saveTokens(taskId, { prompt: 0, completion: 0, total: result.length }).catch(() => {});
+      // ── Phase 1: Flush all pending events after SDK has saved the task ──
+      _pendingEvents.push({ type: 'task_complete', name: 'agent_loop', rounds: hdTrace.length });
+      // Give SDK a tick to finish its save, then flush events
+      await new Promise(r => setTimeout(r, 50));
+      for (const ev of _pendingEvents) {
+        await taskStore.appendEvent(taskId, ev);
+      }
 
     } catch (err: any) {
       eventBus.publish({
