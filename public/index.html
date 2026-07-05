@@ -116,6 +116,42 @@
   .card-json-block { display: none; margin-top: 8px; background: #010409; border: 1px solid #21262d; border-radius: 6px; padding: 10px; font-size: 11px; font-family: 'SF Mono', monospace; color: #7ee787; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
   .card-json-block.show { display: block; }
 
+  /* ── Flow Diagram Modal ── */
+  .flow-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .flow-modal-overlay.show { display: flex; }
+  .flow-modal { background: #0d1117; border: 1px solid #30363d; border-radius: 12px; width: 720px; max-width: 92vw; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .flow-modal-header { padding: 12px 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .flow-modal-header h2 { font-size: 14px; font-weight: 600; flex: 1; }
+  .flow-modal-header .close-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 6px; }
+  .flow-modal-header .close-btn:hover { background: #21262d; color: #e6edf3; }
+  .flow-modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .flow-step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 4px; position: relative; }
+  .flow-step-num { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; z-index: 1; }
+  .flow-step-num.orch { background: #1f6feb; color: #fff; }
+  .flow-step-num.paaw { background: #238636; color: #fff; }
+  .flow-step-num.auto { background: #d29922; color: #fff; }
+  .flow-step-num.webhook { background: #8957e5; color: #fff; }
+  .flow-step-content { flex: 1; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; }
+  .flow-step-content.orch { background: rgba(31,111,235,0.08); border: 1px solid rgba(31,111,235,0.3); }
+  .flow-step-content.paaw { background: rgba(35,134,54,0.08); border: 1px solid rgba(35,134,54,0.3); }
+  .flow-step-content.auto { background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.3); }
+  .flow-step-content.webhook { background: rgba(137,87,229,0.08); border: 1px solid rgba(137,87,229,0.3); }
+  .flow-step-title { font-size: 12px; font-weight: 600; color: #e6edf3; display: flex; align-items: center; gap: 6px; }
+  .flow-step-tag { font-size: 9px; padding: 1px 5px; border-radius: 4px; text-transform: uppercase; font-weight: 600; }
+  .flow-step-tag.orch { background: #1f6feb; color: #fff; }
+  .flow-step-tag.paaw { background: #238636; color: #fff; }
+  .flow-step-tag.auto { background: #d29922; color: #fff; }
+  .flow-step-tag.webhook { background: #8957e5; color: #fff; }
+  .flow-step-desc { font-size: 11px; color: #8b949e; margin-top: 3px; line-height: 1.5; }
+  .flow-step-code { font-size: 10px; font-family: 'SF Mono', monospace; color: #7ee787; margin-top: 4px; background: #010409; padding: 4px 8px; border-radius: 4px; border: 1px solid #21262d; }
+  .flow-connector { width: 2px; height: 16px; background: #30363d; margin-left: 12px; }
+  .flow-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .flow-col { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; }
+  .flow-col h3 { font-size: 12px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
+  .flow-col ul { list-style: none; padding: 0; }
+  .flow-col li { font-size: 11px; color: #8b949e; padding: 3px 0; padding-left: 14px; position: relative; line-height: 1.5; }
+  .flow-col li::before { content: '•'; position: absolute; left: 2px; color: #30363d; }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
@@ -145,6 +181,8 @@
   <div class="state wait" id="cardState">等待</div>
   <div class="mode-toggle">
     <button class="mode-btn" id="modeCard" onclick="showAgentCardModal()" style="background:#21262d;border-color:#388bfd;color:#58a6ff;">📋 Agent Card</button>
+    <button class="mode-btn" id="modeFlowAsync" onclick="showFlowModal('async')" style="background:#21262d;border-color:#8957e5;color:#bc8cff;">🔗 Webhook 流程</button>
+    <button class="mode-btn" id="modeFlowSync" onclick="showFlowModal('sync')" style="background:#21262d;border-color:#d29922;color:#e3b341;">🔗 Sync 流程</button>
     <button class="mode-btn active" id="modeAsync" onclick="setMode('async')">⚡ Webhook</button>
     <button class="mode-btn" id="modeSync" onclick="setMode('sync')">🔒 Sync</button>
   </div>
@@ -161,6 +199,17 @@
     <div class="card-modal-body" id="cardModalBody">
       <div style="text-align:center;color:#8b949e;padding:40px;">載入中...</div>
     </div>
+  </div>
+</div>
+
+<!-- Flow Diagram Modal -->
+<div class="flow-modal-overlay" id="flowModalOverlay" onclick="if(event.target===this)closeFlowModal()">
+  <div class="flow-modal">
+    <div class="flow-modal-header">
+      <h2 id="flowModalTitle">🔗 A2A 互動流程</h2>
+      <button class="close-btn" onclick="closeFlowModal()">✕</button>
+    </div>
+    <div class="flow-modal-body" id="flowModalBody"></div>
   </div>
 </div>
 
@@ -518,6 +567,203 @@ async function showAgentCardModal() {
 
 function closeAgentCardModal() {
   document.getElementById('cardModalOverlay').classList.remove('show');
+}
+
+// ── Flow Diagram Modal ──
+function showFlowModal(mode) {
+  const overlay = document.getElementById('flowModalOverlay');
+  const body = document.getElementById('flowModalBody');
+  const title = document.getElementById('flowModalTitle');
+
+  if (mode === 'async') {
+    title.innerHTML = '🔗 A2A Webhook 互動流程 (Async)';
+    body.innerHTML = `
+      <div class="flow-step">
+        <div class="flow-step-num orch">1</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">使用者發送訊息 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「💭 討論」</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">2</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">LLM 判斷需要遠端協助 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">Orchestrator LLM 分析問題，產生 <code>[REMOTE: ...]</code> 標記，決定轉發給 PAAW HelpDesk</div>
+          <div class="flow-step-code">llmResponse.match(/[REMOTE:\s*(.+?)]/)</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">3</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">發送 message/send (含 webhook 設定) <span class="flow-step-tag orch">Orchestrator → PAAW</span></div>
+          <div class="flow-step-desc">透過 A2A SDK 送出請求，附帶 <code>pushNotification</code> 回呼 URL</div>
+          <div class="flow-step-code">client.sendMessage({ configuration: { pushNotification: { url, token }, blocking: false } })</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num paaw">4</div>
+        <div class="flow-step-content paaw">
+          <div class="flow-step-title">PAAW 立即回傳 <code>status: working</code> <span class="flow-step-tag paaw">PAAW</span></div>
+          <div class="flow-step-desc">PAAW 收到請求後立即回覆 task ID + working 狀態，然後在背景開始處理（跑 ToolEngine + LLM）</div>
+          <div class="flow-step-code">{ "status": { "state": "working" }, "id": "task-xxx" }</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num webhook">5</div>
+        <div class="flow-step-content webhook">
+          <div class="flow-step-title">Orchestrator 開始輪詢 (Polling) <span class="flow-step-tag webhook">Orchestrator</span></div>
+          <div class="flow-step-desc">每 2 秒呼叫 <code>tasks/get</code> 檢查任務狀態，最多 90 次（180 秒 timeout）</div>
+          <div class="flow-step-code">for (i=0; i<90; i++) { await client.getTask({ id: taskId }); ... }</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num auto">5a</div>
+        <div class="flow-step-content auto">
+          <div class="flow-step-title">⡡ PAAW 回傳 <code>input-required</code>（需要澄清） <span class="flow-step-tag auto">Multi-turn</span></div>
+          <div class="flow-step-desc">HelpDesk 可能反問澄清問題。Orchestrator LLM 自動根據原始使用者問題產生回答，再送回 PAAW（最多 3 輪）</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num paaw">6</div>
+        <div class="flow-step-content paaw">
+          <div class="flow-step-title">PAAW 處理完成，回傳 <code>completed</code> <span class="flow-step-tag paaw">PAAW</span></div>
+          <div class="flow-step-desc">輪詢拿到最終結果，包含 artifacts（答案文字）</div>
+          <div class="flow-step-code">{ "status": { "state": "completed" }, "artifacts": [{ "parts": [{ "text": "答案" }] }] }</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">7</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">Orchestrator 整合回覆使用者 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">把 HelpDesk 答案整合進回覆，顯示在對話框 + A2A 互動過程面板</div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding:12px;background:#161b22;border:1px solid #21262d;border-radius:8px;">
+        <div style="font-size:12px;font-weight:600;color:#e6edf3;margin-bottom:8px;">⚡ Webhook 模式特點</div>
+        <div class="flow-compare">
+          <div class="flow-col">
+            <h3>✅ 優點</h3>
+            <ul>
+              <li>非阻塞，PAAW 可在背景慢慢處理</li>
+              <li>支援 pushNotification 回呼機制</li>
+              <li>適合長時間運算的任務</li>
+              <li>符合 A2A Protocol 標準</li>
+            </ul>
+          </div>
+          <div class="flow-col">
+            <h3>⚠️ 代價</h3>
+            <ul>
+              <li>需要 polling（每 2s 一次）</li>
+              <li>回應延遲略高（首回 + 輪詢間隔）</li>
+              <li>邏輯較複雜</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    title.innerHTML = '🔗 A2A Sync 互動流程 (Blocking)';
+    body.innerHTML = `
+      <div class="flow-step">
+        <div class="flow-step-num orch">1</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">使用者發送訊息 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">使用者在 Orchestrator UI 輸入問題，點擊「💭 討論」</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">2</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">LLM 判斷需要遠端協助 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">Orchestrator LLM 產生 <code>[REMOTE: ...]</code>，決定轉發給 PAAW HelpDesk</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">3</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">發送 message/send (無 webhook，blocking) <span class="flow-step-tag orch">Orchestrator → PAAW</span></div>
+          <div class="flow-step-desc">透過 A2A SDK 送出請求，<strong>不帶</strong> <code>pushNotification</code>，HTTP 連線保持等待</div>
+          <div class="flow-step-code">client.sendMessage({ message: { ... } })  // 無 configuration</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num auto">⏳</div>
+        <div class="flow-step-content auto">
+          <div class="flow-step-title">HTTP 連線保持等待中... <span class="flow-step-tag auto">Blocking</span></div>
+          <div class="flow-step-desc">Orchestrator 的 HTTP request 一直等 PAAW 回應，不輪詢。PAAW 在同一個 request 內跑完 ToolEngine + LLM</div>
+          <div class="flow-step-code">await client.sendMessage(sendParams)  // ← 卡在這裡等到 PAAW 處理完</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num auto">5a</div>
+        <div class="flow-step-content auto">
+          <div class="flow-step-title">⡡ PAAW 回傳 <code>input-required</code>（需要澄清） <span class="flow-step-tag auto">Multi-turn</span></div>
+          <div class="flow-step-desc">同 Webhook 模式，Orchestrator LLM 自動回答澄清問題，再送回 PAAW</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num paaw">4</div>
+        <div class="flow-step-content paaw">
+          <div class="flow-step-title">PAAW 處理完成，直接回傳結果 <span class="flow-step-tag paaw">PAAW</span></div>
+          <div class="flow-step-desc">一次 HTTP response 包含最終結果（<code>completed</code> 或 <code>input-required</code>），不需輪詢</div>
+          <div class="flow-step-code">response = await client.sendMessage(sendParams)
+// 直接拿到 { status: { state: "completed" }, artifacts: [...] }</div>
+        </div>
+      </div>
+      <div class="flow-connector"></div>
+      <div class="flow-step">
+        <div class="flow-step-num orch">5</div>
+        <div class="flow-step-content orch">
+          <div class="flow-step-title">Orchestrator 整合回覆使用者 <span class="flow-step-tag orch">Orchestrator</span></div>
+          <div class="flow-step-desc">直接從 response 取出答案，顯示在對話框 + A2A 互動過程面板</div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding:12px;background:#161b22;border:1px solid #21262d;border-radius:8px;">
+        <div style="font-size:12px;font-weight:600;color:#e6edf3;margin-bottom:8px;">🔒 Sync 模式特點</div>
+        <div class="flow-compare">
+          <div class="flow-col">
+            <h3>✅ 優點</h3>
+            <ul>
+              <li>簡單直觀，一個 request 一個 response</li>
+              <li>無需 polling，少了網路開銷</li>
+              <li>延遲較低（省去輪詢間隔）</li>
+              <li>適合快速回應的任務</li>
+            </ul>
+          </div>
+          <div class="flow-col">
+            <h3>⚠️ 代價</h3>
+            <ul>
+              <li>HTTP 連線長時間佔用</li>
+              <li>逾時風險（長任務可能 timeout）</li>
+              <li>無 pushNotification 支援</li>
+              <li>PAAW 端需同步處理完才能回應</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  overlay.classList.add('show');
+}
+
+function closeFlowModal() {
+  document.getElementById('flowModalOverlay').classList.remove('show');
 }
 
 function renderAgentCard(card) {
