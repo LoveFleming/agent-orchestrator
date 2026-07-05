@@ -890,19 +890,8 @@ const httpServer = app.listen(PORT, () => {
   discoverRemoteAgent();
 });
 
-// ── Graceful shutdown (fixes "Process didn't exit in 5s. Force killing...") ──
-function shutdown(signal: string) {
-  console.log(`\n[${signal}] Shutting down gracefully...`);
-  httpServer.close(() => {
-    console.log('[Shutdown] HTTP server closed.');
-    process.exit(0);
-  });
-  // Force exit after 3s if something hangs
-  setTimeout(() => {
-    console.log('[Shutdown] Forcing exit after 3s timeout.');
-    process.exit(1);
-  }, 3000);
-}
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+// ── Graceful shutdown for tsx watch ──
+// tsx watch sends SIGTERM on file change, expects process to exit within 5s
+// For a dev server, immediate exit is fine — tsx watch restarts it instantly
+process.on('SIGTERM', () => { console.log('[SIGTERM] Exiting...'); process.exit(0); });
+process.on('SIGINT', () => { console.log('[SIGINT] Exiting...'); process.exit(0); });
