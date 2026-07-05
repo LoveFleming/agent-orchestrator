@@ -744,6 +744,19 @@ app.post('/a2a/webhook', express.json(), (req, res) => {
 const webhookEvents: any[] = [];
 
 // ── Custom API endpoints for UI ──
+app.get('/api/models', (_req, res) => {
+  if (!providerConfig) return res.json({ models: [], defaultModel: '', active: '' });
+  const active = providerConfig.active || '';
+  const provider = providerConfig.providers?.[active];
+  const models: any[] = [];
+  for (const [pid, p] of Object.entries<any>(providerConfig.providers || {})) {
+    for (const m of (p.models || [])) {
+      models.push({ id: m.id, name: m.name, provider: pid, providerName: p.name });
+    }
+  }
+  res.json({ active, defaultModel: providerConfig.defaultModel || '', models });
+});
+
 app.get('/api/channels', (_req, res) => {
   const channels = Array.from(chatChannels.values()).map(ch => ({
     contextId: ch.contextId,

@@ -190,6 +190,9 @@
     <button class="mode-btn" id="modeFlowAsync" onclick="showFlowModal('async')" style="background:#21262d;border-color:#8957e5;color:#bc8cff;">🔗 Webhook 流程</button>
     <button class="mode-btn" id="modeFlowSync" onclick="showFlowModal('sync')" style="background:#21262d;border-color:#d29922;color:#e3b341;">🔗 Sync 流程</button>
     <button class="mode-btn" id="modeSpec" onclick="showSpecModal()" style="background:#21262d;border-color:#3fb950;color:#3fb950;">📖 A2A Spec</button>
+    <select id="modelSelector" onchange="onModelChange(this.value)" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:4px 8px;font-size:12px;margin-left:8px;cursor:pointer;">
+      <option value="">Loading models...</option>
+    </select>
     <button class="mode-btn active" id="modeAsync" onclick="setMode('async')">⚡ Webhook</button>
     <button class="mode-btn" id="modeSync" onclick="setMode('sync')">🔒 Sync</button>
   </div>
@@ -884,6 +887,31 @@ function closeFlowModal() {
   document.getElementById('flowModalOverlay').classList.remove('show');
 }
 
+// ── Model Selector ──
+let selectedModel = '';
+async function loadModels() {
+  try {
+    const res = await fetch(`${BASE}/api/models`);
+    if (res.ok) {
+      const data = await res.json();
+      const sel = document.getElementById('modelSelector');
+      sel.innerHTML = '';
+      for (const m of (data.models || [])) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = `${m.providerName} · ${m.name}`;
+        if (m.id === data.defaultModel) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      selectedModel = data.defaultModel || '';
+    }
+  } catch {}
+}
+function onModelChange(val) {
+  selectedModel = val;
+}
+loadModels();
+
 function showSpecModal() {
   document.getElementById('specModalOverlay').classList.add('show');
 }
@@ -1083,7 +1111,7 @@ async function synthesizeResult(originalQuestion, responses) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'message/send',
-        params: { message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text: `原始使用者問題：「${originalQuestion}」\n\n你剛才透過 HelpDesk 進行了 ${responses.length} 輪 A2A 互動，以下是各輪的回應：\n\n${roundsText}\n\n請根據以上內容，用繁體中文整理一個完整、結構化的最終回答給使用者。不要提及 A2A 輪次或 HelpDesk，直接以專業客服的口吻回答。` }] } },
+        params: { ...(selectedModel ? { metadata: { model: selectedModel } } : {}), message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text: `原始使用者問題：「${originalQuestion}」\n\n你剛才透過 HelpDesk 進行了 ${responses.length} 輪 A2A 互動，以下是各輪的回應：\n\n${roundsText}\n\n請根據以上內容，用繁體中文整理一個完整、結構化的最終回答給使用者。不要提及 A2A 輪次或 HelpDesk，直接以專業客服的口吻回答。` }] } },
         id: `synth-${Date.now()}`,
       }),
     });
@@ -1109,7 +1137,7 @@ async function sendToAgentAuto(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'message/send',
-        params: { message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text }], ...(contextId ? { contextId } : {}) } },
+        params: { ...(selectedModel ? { metadata: { model: selectedModel } } : {}), message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text }], ...(contextId ? { contextId } : {}) } },
         id: `req-${Date.now()}`,
       }),
     });
@@ -1150,7 +1178,7 @@ async function generateFollowUp(remoteResponse) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'message/send',
-        params: { message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text: `剛才遠端 Agent 回答了：\n\n${remoteResponse.slice(0, 500)}\n\n請根據這個回答，用中文提出一個自然的追問或延伸問題。只輸出問題本身，不要加任何前言或解釋。` }], ...(contextId ? { contextId } : {}) } },
+        params: { ...(selectedModel ? { metadata: { model: selectedModel } } : {}), message: { kind: 'message', role: 'user', messageId: `msg-${Date.now()}`, parts: [{ kind: 'text', text: `剛才遠端 Agent 回答了：\n\n${remoteResponse.slice(0, 500)}\n\n請根據這個回答，用中文提出一個自然的追問或延伸問題。只輸出問題本身，不要加任何前言或解釋。` }], ...(contextId ? { contextId } : {}) } },
         id: `followup-${Date.now()}`,
       }),
     });
