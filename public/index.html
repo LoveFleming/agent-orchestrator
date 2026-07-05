@@ -365,7 +365,7 @@
       <span class="count" id="chatCount"></span>
     </div>
     <div class="panel-body" id="chatArea">
-      <div class="chat-empty">直接聊天或按「💭 討論」跟遠端 Agent 對話</div>
+      <div class="chat-empty">輸入訊息或按「🔄 自動對話」啟動 A2A 多輪互動</div>
     </div>
   </div>
 
@@ -375,9 +375,7 @@
 <div class="input-area">
   <textarea id="input" rows="1" placeholder="輸入訊息... (Enter 送出)"></textarea>
   <button class="btn-send" id="btnSend" onclick="sendChat()">送出</button>
-  <button class="btn-discuss" id="btnDiscuss" onclick="sendDiscuss()">💭 討論</button>
   <button class="btn-discuss" id="btnAutoLoop" onclick="toggleAutoLoop()" style="background:#238636;border-color:#238636;">🔄 自動對話</button>
-  <button class="btn-discuss" id="btnTicket" onclick="sendOpenTicket()" style="background:#1f6feb;border-color:#1f6feb;">🎫 開 Ticket</button>
 </div>
 
 <script>
@@ -570,7 +568,7 @@ function addA2ARound(round, question, response, status, clarify) {
 function setLoading(v) {
   loading = v;
   document.getElementById('btnSend').disabled = v;
-  document.getElementById('btnDiscuss').disabled = v;
+  document.getElementById('btnAutoLoop').disabled = v;
 }
 
 // ── Load remote agent card ──
@@ -620,24 +618,6 @@ async function sendChat() {
 }
 
 // ── Send: discuss with remote ──
-async function sendDiscuss() {
-  const input = document.getElementById('input');
-  const text = input.value.trim();
-  if (!text || loading) return;
-  input.value = '';
-  input.style.height = 'auto';
-  setLoading(true);
-  addChatMsg('user', text);
-
-  // Show A2A thinking indicator
-  showA2AThinking('正在與遠端 Agent 互動...');
-  addChatSys('📡 正與遠端 Agent 討論...');
-
-  await sendToAgent(`跟遠端 Agent 討論：${text}`, true);
-
-  hideA2AThinking();
-  setLoading(false);
-}
 
 // ── Core: send to Orchestrator A2A ──
 async function sendToAgent(text, isDiscuss) {
@@ -1242,75 +1222,6 @@ async function generateFollowUp(remoteResponse) {
 }
 
 // ── Open Ticket via A2A ──
-async function sendOpenTicket() {
-  const input = document.getElementById('input');
-  const text = input.value.trim() || '請介紹 PAAW 的 Skill Builder 功能';
-  input.value = '';
-  input.style.height = 'auto';
-
-  addChatMsg('user', text);
-  addChatSys('🎫 透過 A2A 開 Ticket 中...');
-  setLoading(true);
-  showA2AThinking('正在直接向 PAAW HelpDesk 發送 A2A 請求...');
-
-  const PAAW_A2A = REMOTE + '/a2a';
-  const msgId = `msg-ticket-${Date.now()}`;
-  const ctxId = `ticket-ctx-${Date.now()}`;
-
-  try {
-    // ── 直接發到 PAAW 的 A2A endpoint（不經過 Orchestrator Agent Loop）──
-    const res = await fetch(PAAW_A2A, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', method: 'message/send',
-        params: {
-          message: {
-            role: 'user',
-            parts: [{ type: 'text', text }],
-            messageId: msgId,
-            contextId: ctxId,
-          },
-        },
-        id: `ticket-${Date.now()}`,
-      }),
-    });
-    const data = await res.json();
-
-    hideA2AThinking();
-
-    if (data.result) {
-      const task = data.result;
-      let responseText = '(無回應)';
-      if (task.artifacts?.[0]?.parts?.[0]?.text) {
-        responseText = task.artifacts[0].parts[0].text;
-      } else if (task.history) {
-        const lastAgent = [...task.history].reverse().find(m => m.role === 'agent');
-        if (lastAgent?.parts?.[0]?.text) responseText = lastAgent.parts[0].text;
-      }
-
-      // Show A2A trace in top panel
-      addA2ASeparator();
-      addA2ARound(1, text, responseText, task.status?.state === 'completed' ? 'answered' : 'input-required');
-
-      // Show result in client panel
-      addChatMsg('agent', responseText);
-      addChatSys('🎫 Ticket 已建立 — 同時出現在 PAAW HelpDesk → 🎫 Tickets tab');
-    } else if (data.error) {
-      chatArea.querySelectorAll('.chat-sys').forEach(el => {
-        if (el.textContent.includes('開 Ticket')) el.remove();
-      });
-      addChatSys(`❌ 開 Ticket 失敗: ${data.error.message || JSON.stringify(data.error)}`);
-    }
-  } catch (err) {
-    hideA2AThinking();
-    chatArea.querySelectorAll('.chat-sys').forEach(el => {
-      if (el.textContent.includes('開 Ticket')) el.remove();
-    });
-    addChatSys(`❌ 連線失敗: ${err.message}`);
-  }
-  setLoading(false);
-}
 
 </script>
 </body>
