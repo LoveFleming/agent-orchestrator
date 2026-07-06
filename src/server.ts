@@ -13,6 +13,8 @@ import 'dotenv/config';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { AgentCard, AGENT_CARD_PATH, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, MessageSendParams } from '@a2a-js/sdk';
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { ClientFactory } from '@a2a-js/sdk/client';
 import {
   AgentExecutor,
@@ -115,21 +117,42 @@ try {
 }
 
 
+function getLLMModel() {
+  const config = (() => {
+    if (LLM_BASE_URL && LLM_API_KEY) {
+      return { baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL, providerId: 'custom' };
+    }
+    if (providerConfig) {
+      const active = providerConfig.active;
+      const provider = providerConfig.providers[active];
+      return {
+        baseURL: provider?.baseURL || '',
+        apiKey: provider?.apiKey || '',
+        model: providerConfig.defaultModel || 'glm-5.1',
+        providerId: active,
+      };
+    }
+    return null;
+  })();
+
+  if (!config) return null;
+
+  const openai = createOpenAI({
+    baseURL: config.baseURL.replace(/\/+$/, ''),
+    apiKey: config.apiKey,
+    headers: config.providerId === 'openrouter'
+      ? { 'HTTP-Referer': 'https://agent-orchestrator.ai', 'X-Title': 'Agent Orchestrator' }
+      : undefined,
+  });
+
+  return { model: openai(config.model), providerId: config.providerId, modelName: config.model };
+}
+
+// Legacy accessor for health/log display
 function getLLMConfig() {
-  if (LLM_BASE_URL && LLM_API_KEY) {
-    return { baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL };
-  }
-  if (providerConfig) {
-    const active = providerConfig.active;
-    const provider = providerConfig.providers[active];
-    return {
-      baseURL: provider?.baseURL || '',
-      apiKey: provider?.apiKey || '',
-      model: providerConfig.defaultModel || 'glm-5.1',
-      providerId: active,
-    };
-  }
-  return null;
+  const m = getLLMModel();
+  if (!m) return null;
+  return { providerId: m.providerId, model: m.modelName };
 }
 
 // ════════════════════════════════════════════════════════
@@ -204,41 +227,28 @@ ${buildSkillsDescription()}
 }
 
 async function callLLM(messages: Array<{ role: string; content: string }>): Promise<string> {
-  const config = getLLMConfig();
-  if (!config) throw new Error('No LLM provider configured. Set .env or ensure providers.json exists.');
+  const llm = getLLMModel();
+  if (!llm) throw new Error('No LLM provider configured. Set .env or ensure providers.json exists.');
 
-  const baseURL = config.baseURL.replace(/\/+$/, '');
-  const extraHeaders: Record<string, string> = {};
-  if (config.providerId === 'openrouter') {
-    extraHeaders['HTTP-Referer'] = 'https://agent-orchestrator.ai';
-    extraHeaders['X-Title'] = 'Agent Orchestrator';
-  }
-
-  const body = {
-    model: config.model,
-    messages,
-    stream: false,
-    temperature: 0.7,
-    max_tokens: 2000,
-  };
-
-  const res = await fetch(`${baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
+  // Vercel AI SDK: system message must be passed via `system` option, not in messages array
+  let systemPrompt: string | undefined;
+  const nonSystemMessages = messages.filter(m => {
+    if (m.role === 'system') {
+      systemPrompt = m.content;
+      return false;
+    }
+    return true;
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`LLM API error ${res.status}: ${text.slice(0, 200)}`);
-  }
+  const { text } = await generateText({
+    model: llm.model,
+    system: systemPrompt,
+    messages: nonSystemMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    temperature: 0.7,
+    maxOutputTokens: 2000,
+  });
 
-  const data = await res.json() as any;
-  return data.choices?.[0]?.message?.content || '(empty response)';
+  return text || '(empty response)';
 }
 
 // ════════════════════════════════════════════════════════
