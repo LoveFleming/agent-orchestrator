@@ -95,19 +95,16 @@ const _thisDir = _dirname(_fileURLToPath(import.meta.url));
 let providerConfig: any = null;
 try {
   const fs = await import('fs');
+  // 優先讀自己的 data/config/providers.json，不再依賴 tPAAW 絕對路徑
   const candidates = [
-    _resolve(_thisDir, '../../../tPAAW/data/config/providers.json'),
-    _resolve(_thisDir, '../../tPAAW/data/config/providers.json'),
-    _resolve(process.cwd(), '../tPAAW/data/config/providers.json'),
     _resolve(process.cwd(), 'data/config/providers.json'),
+    _resolve(_thisDir, '../data/config/providers.json'),
+    _resolve(_thisDir, '../../data/config/providers.json'),
   ];
   const configPath = candidates.find(p => fs.existsSync(p));
   if (configPath) {
-    const raw = fs.readFileSync(configPath, 'utf-8');
-    providerConfig = JSON.parse(raw);
+    providerConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   }
-  const raw = fs.readFileSync(configPath, 'utf-8');
-  providerConfig = JSON.parse(raw);
 } catch {}
 
 
