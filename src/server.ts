@@ -146,7 +146,7 @@ function getLLMModel() {
       : undefined,
   });
 
-  return { model: openai(config.model), providerId: config.providerId, modelName: config.model };
+  return { model: openai.chat(config.model), providerId: config.providerId, modelName: config.model };
 }
 
 // Legacy accessor for health/log display
