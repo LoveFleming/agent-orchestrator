@@ -100,12 +100,19 @@ try {
     _resolve(process.cwd(), 'data/config/providers.json'),
     _resolve(_thisDir, '../data/config/providers.json'),
     _resolve(_thisDir, '../../data/config/providers.json'),
+    _resolve(_thisDir, '../../../data/config/providers.json'),
   ];
-  const configPath = candidates.find(p => fs.existsSync(p));
+  console.log('[provider-config] searching candidates:', candidates);
+  const configPath = candidates.find(p => { try { return fs.existsSync(p); } catch { return false; } });
   if (configPath) {
     providerConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    console.log('[provider-config] loaded:', configPath);
+  } else {
+    console.warn('[provider-config] NO providers.json found in any candidate path');
   }
-} catch {}
+} catch (e) {
+  console.error('[provider-config] Error loading providers.json:', e);
+}
 
 
 function getLLMConfig() {
