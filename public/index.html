@@ -683,11 +683,12 @@ async function sendToAgent(text, isDiscuss) {
       addChatMsg('agent', responseText);
     } else if (data.error) {
       hideA2AThinking();
-      addChatSys(`❌ ${data.error.message}`);
+      addA2ARound(1, text, `❌ ${data.error.message}`, 'answered');
     }
   } catch (err) {
     hideA2AThinking();
-    addChatSys(`❌ 連線失敗: ${err.message}`);
+    // error shown in top panel only
+    addA2ARound(1, text, `❌ 連線失敗: ${err.message}`, 'answered');
   }
 }
 
@@ -1080,12 +1081,10 @@ function connectSSE() {
         : `📞 Webhook — task ${task.id?.slice(0,8)}… ${task.status?.state}`;
       addA2ASeparator(stateLabel);
 
-      // Only show final answer in chat panel (skip intermediate 'working' updates)
+      // Intermediate status → top panel only; final result → bottom panel
       if (task.status?.state !== 'working') {
-        addChatSys(`📞 收到 Webhook 回呼：${task.status?.state}${task.status?.message ? ' — ' + task.status.message : ''}`);
         addChatMsg('agent', responseText);
       } else {
-        // Intermediate status — just show in top panel trace
         addA2ARound(1, question, `⏳ ${task.status?.message || 'processing...'}`, 'answered');
       }
 
@@ -1112,7 +1111,7 @@ async function toggleAutoLoop() {
     autoLoopActive = false;
     document.getElementById('btnAutoLoop').textContent = '🔄 自動對話';
     document.getElementById('btnAutoLoop').style.background = '#238636';
-    addChatSys('⏹ 自動對話已停止');
+    // auto-loop stopped notice goes to A2A panel, not chat panel
     return;
   }
 
@@ -1250,7 +1249,8 @@ async function sendToAgentAuto(text) {
       return responseText;
     }
   } catch (err) {
-    addChatSys(`❌ 連線失敗: ${err.message}`);
+    // error shown in top panel only
+    addA2ARound(autoLoopRounds, text, `❌ 連線失敗: ${err.message}`, 'answered');
   }
   return null;
 }
