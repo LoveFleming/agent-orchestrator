@@ -140,6 +140,7 @@ function getLLMModel() {
   const openai = createOpenAI({
     baseURL: config.baseURL.replace(/\/+$/, ''),
     apiKey: config.apiKey,
+    compatibility: 'compatible', // 强制 Chat Completions API
     headers: config.providerId === 'openrouter'
       ? { 'HTTP-Referer': 'https://agent-orchestrator.ai', 'X-Title': 'Agent Orchestrator' }
       : undefined,
