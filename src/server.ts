@@ -174,7 +174,13 @@ const AGENT_CARD: AgentCard = {
 // ════════════════════════════════════════════════════════
 
 function buildSystemPrompt(): string {
-return `你是 Agent Orchestrator，一個友善的 AI 助手。你是客戶端的請求入口，負責理解使用者需求，決定自己回答還是調度遠端 Agent。
+const _now = new Date();
+const _dateStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+const _weekday = ['日','一','二','三','四','五','六'][_now.getDay()];
+const _timeStr = `${String(_now.getHours()).padStart(2, '0')}:${String(_now.getMinutes()).padStart(2, '0')}`;
+return `今天是 ${_dateStr}（星期${_weekday}），時間 ${_timeStr}，時區 Asia/Taipei (UTC+8)。
+
+你是 Agent Orchestrator，一個友善的 AI 助手。你是客戶端的請求入口，負責理解使用者需求，決定自己回答還是調度遠端 Agent。
 
 ${buildSkillsDescription()}
 ## 路由規則
